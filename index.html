@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encuesta MIR/EIR - Promoción de la Salud</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2c5282;
+            --accent: #4299e1;
+            --success: #38a169;
+            --warning: #d69e2e;
+            --danger: #e53e3e;
+            --bg: #f0f4f8;
+            --card: #ffffff;
+            --text: #2d3748;
+            --text-light: #718096;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        
+        /* Header */
+        .header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); color: white; padding: 18px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        .header h1 { font-size: 1.4em; display: flex; align-items: center; gap: 10px; }
+        .header-stats { display: flex; gap: 20px; }
+        .header-stat { text-align: center; }
+        .header-stat .number { font-size: 1.8em; font-weight: 700; }
+        .header-stat .label { font-size: 0.75em; opacity: 0.9; }
+        
+        /* Nav */
+        .nav { background: var(--card); padding: 12px 25px; display: flex; gap: 8px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .nav-btn { padding: 10px 22px; border: none; border-radius: 25px; font-size: 0.9em; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
+        .nav-btn.primary { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; }
+        .nav-btn.secondary { background: var(--bg); color: var(--primary); }
+        .nav-btn.success { background: linear-gradient(135deg, #276749, var(--success)); color: white; }
+        .nav-btn:hover { transform: translateY(-2px); }
+        .nav-btn.active { box-shadow: inset 0 2px 5px rgba(0,0,0,0.2); }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .view { display: none; }
+        .view.active { display: block; }
+        
+        .card { background: var(--card); border-radius: 16px; padding: 22px; margin-bottom: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .card h2 { color: var(--primary); margin-bottom: 18px; display: flex; align-items: center; gap: 10px; font-size: 1.15em; }
+        
+        /* Session */
+        .session-controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+        .session-btn { padding: 14px 26px; border: none; border-radius: 12px; font-size: 1em; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
+        .session-btn.start { background: linear-gradient(135deg, #276749, var(--success)); color: white; }
+        .session-btn.stop { background: linear-gradient(135deg, #c53030, var(--danger)); color: white; }
+        .session-btn.reset { background: var(--bg); color: var(--text); }
+        .session-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .session-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .session-status { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-radius: 12px; margin-bottom: 18px; font-weight: 500; }
+        .session-status.active { background: #c6f6d5; color: #276749; }
+        .session-status.inactive { background: #fed7d7; color: #c53030; }
+        .session-status.waiting { background: #fefcbf; color: #975a16; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .session-status.active .status-dot { background: #38a169; animation: pulse 1.5s infinite; }
+        .session-status.inactive .status-dot { background: #e53e3e; }
+        .session-status.waiting .status-dot { background: #d69e2e; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* QR */
+        .qr-section { text-align: center; padding: 25px; }
+        .qr-container { display: inline-block; padding: 20px; background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); margin: 15px 0; }
+        .qr-url { margin-top: 15px; padding: 12px 18px; background: var(--bg); border-radius: 10px; font-family: monospace; font-size: 0.8em; word-break: break-all; }
+        .qr-instructions { margin-top: 20px; color: var(--text-light); line-height: 1.6; font-size: 0.9em; }
+        
+        /* Grid */
+        .monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+        
+        /* Progress Ring */
+        .progress-ring-container { text-align: center; padding: 15px; }
+        .progress-ring { width: 150px; height: 150px; margin: 0 auto; }
+        .progress-ring-text { font-size: 2em; font-weight: 700; fill: var(--primary); }
+        .progress-ring-label { font-size: 0.8em; fill: var(--text-light); }
+        
+        /* Stats */
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+        .stat-mini { background: var(--bg); border-radius: 10px; padding: 15px 10px; text-align: center; }
+        .stat-mini .icon { font-size: 1.4em; margin-bottom: 5px; }
+        .stat-mini .value { font-size: 1.5em; font-weight: 700; color: var(--primary); }
+        .stat-mini .label { font-size: 0.7em; color: var(--text-light); margin-top: 3px; }
+        
+        /* Live Feed */
+        .live-feed { max-height: 320px; overflow-y: auto; }
+        .live-item { display: flex; align-items: center; gap: 12px; padding: 10px; margin: 6px 0; background: var(--bg); border-radius: 10px; animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        .live-item .icon { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1em; }
+        .live-item .icon.mir { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; }
+        .live-item .icon.eir { background: linear-gradient(135deg, #c05621, #ed8936); color: white; }
+        .live-item .info { flex: 1; }
+        .live-item .info .name { font-weight: 600; font-size: 0.95em; }
+        .live-item .info .meta { font-size: 0.8em; color: var(--text-light); }
+        .live-item .time { font-size: 0.75em; color: var(--text-light); }
+        
+        /* Dist Bars */
+        .dist-section h4 { font-size: 0.9em; margin-bottom: 8px; }
+        .dist-item { margin: 8px 0; }
+        .dist-label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.85em; }
+        .dist-bar { height: 20px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
+        .dist-fill { height: 100%; border-radius: 10px; transition: width 0.5s ease; min-width: 25px; display: flex; align-items: center; padding-left: 8px; }
+        .dist-fill span { color: white; font-size: 0.7em; font-weight: 600; }
+        
+        /* Results Tabs */
+        .results-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+        .results-tab { padding: 10px 18px; border: none; background: var(--bg); border-radius: 20px; cursor: pointer; font-weight: 500; font-size: 0.9em; transition: all 0.3s; }
+        .results-tab:hover { background: #e2e8f0; }
+        .results-tab.active { background: var(--primary); color: white; }
+        .results-content { display: none; }
+        .results-content.active { display: block; }
+        
+        /* Gauge */
+        .gauge-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .gauge-item { text-align: center; padding: 15px; }
+        .gauge-svg { width: 110px; height: 65px; }
+        .gauge-value { font-size: 1.5em; font-weight: 700; color: var(--primary); margin-top: 5px; }
+        .gauge-label { font-size: 0.75em; color: var(--text-light); margin-top: 5px; }
+        
+        /* Lollipop */
+        .lollipop-item { display: flex; align-items: center; margin: 10px 0; }
+        .lollipop-label { width: 140px; font-size: 0.8em; color: var(--text); }
+        .lollipop-track { flex: 1; height: 4px; background: #e2e8f0; border-radius: 2px; position: relative; margin: 0 8px; }
+        .lollipop-line { height: 4px; border-radius: 2px; position: absolute; left: 0; transition: width 0.5s; }
+        .lollipop-dot { width: 24px; height: 24px; border-radius: 50%; position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; color: white; font-size: 0.6em; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: left 0.5s; }
+        
+        /* Collab Grid */
+        .collab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+        .collab-item { background: var(--bg); border-radius: 10px; padding: 12px 8px; text-align: center; transition: all 0.3s; }
+        .collab-item.high { background: #ebf8ff; border: 2px solid var(--accent); }
+        .collab-item .icon { font-size: 1.5em; margin-bottom: 5px; }
+        .collab-item .name { font-size: 0.65em; color: var(--text-light); margin-bottom: 4px; line-height: 1.2; }
+        .collab-item .pct { font-size: 1.1em; font-weight: 700; color: var(--primary); }
+        
+        /* Ranking */
+        .ranking-item { display: flex; align-items: center; padding: 12px; margin: 8px 0; background: var(--bg); border-radius: 10px; }
+        .ranking-item .pos { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85em; margin-right: 12px; background: var(--primary); color: white; }
+        .ranking-item:nth-child(1) .pos { background: linear-gradient(135deg, #d69e2e, #f6e05e); }
+        .ranking-item:nth-child(2) .pos { background: linear-gradient(135deg, #718096, #a0aec0); }
+        .ranking-item:nth-child(3) .pos { background: linear-gradient(135deg, #c05621, #ed8936); }
+        .ranking-item .icon { font-size: 1.3em; margin-right: 10px; }
+        .ranking-item .text { flex: 1; font-size: 0.9em; }
+        .ranking-item .value { font-size: 1.2em; font-weight: 700; color: var(--primary); }
+        
+        /* Pictogram */
+        .pictogram { display: flex; flex-wrap: wrap; gap: 3px; margin: 15px 0; justify-content: center; }
+        .pictogram-icon { font-size: 1.2em; }
+        .pictogram-legend { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 10px; font-size: 0.85em; }
+        .pictogram-legend-item { display: flex; align-items: center; gap: 5px; }
+        
+        /* Waffle */
+        .waffle { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; max-width: 250px; margin: 15px auto; }
+        .waffle-cell { aspect-ratio: 1; border-radius: 3px; }
+        .waffle-legend { display: flex; justify-content: center; gap: 20px; margin-top: 10px; font-size: 0.85em; }
+        .waffle-legend-item { display: flex; align-items: center; gap: 6px; }
+        .waffle-legend-color { width: 14px; height: 14px; border-radius: 3px; }
+        
+        /* Survey Mode */
+        .survey-mode { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); min-height: 100vh; }
+        .survey-mode .header { background: transparent; box-shadow: none; }
+        .survey-container { max-width: 700px; margin: 0 auto; padding: 20px; }
+        .survey-card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .survey-progress { background: #e2e8f0; height: 6px; border-radius: 3px; margin-bottom: 25px; overflow: hidden; }
+        .survey-progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.3s; }
+        .survey-section h3 { color: var(--primary); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid var(--bg); font-size: 1.2em; }
+        .survey-question { margin-bottom: 22px; }
+        .survey-question > label { display: block; margin-bottom: 10px; font-weight: 500; color: var(--text); }
+        .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+        .radio-option, .checkbox-option { display: flex; align-items: center; gap: 10px; padding: 12px 15px; background: var(--bg); border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .radio-option:hover, .checkbox-option:hover { background: #e2e8f0; }
+        .radio-option.selected, .checkbox-option.selected { background: #ebf8ff; border-color: var(--accent); }
+        .radio-option input, .checkbox-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .checkbox-option::before { content: ''; }
+        .likert-scale { display: flex; gap: 8px; flex-wrap: wrap; }
+        .likert-option { flex: 1; min-width: 60px; text-align: center; padding: 12px 6px; background: var(--bg); border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+        .likert-option:hover { background: #e2e8f0; }
+        .likert-option.selected { background: var(--primary); color: white; border-color: var(--primary); }
+        .likert-option .number { font-size: 1.3em; font-weight: 700; }
+        .likert-option .text { font-size: 0.6em; margin-top: 4px; }
+        select.survey-select { width: 100%; padding: 12px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 1em; background: white; }
+        .survey-nav { display: flex; justify-content: space-between; margin-top: 25px; padding-top: 20px; border-top: 2px solid var(--bg); }
+        .survey-btn { padding: 12px 28px; border: none; border-radius: 25px; font-size: 1em; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .survey-btn.next { background: var(--primary); color: white; }
+        .survey-btn.prev { background: var(--bg); color: var(--text); }
+        .survey-btn.submit { background: var(--success); color: white; }
+        .survey-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .survey-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .survey-complete { text-align: center; padding: 50px 20px; }
+        .survey-complete .icon { font-size: 4em; margin-bottom: 20px; }
+        .survey-complete h2 { color: var(--success); margin-bottom: 10px; }
+        .survey-complete p { color: var(--text-light); }
+        
+        .matrix-container { overflow-x: auto; }
+        .matrix-table { width: 100%; border-collapse: collapse; }
+        .matrix-table th { padding: 8px 5px; font-size: 0.65em; color: var(--text-light); font-weight: 500; }
+        .matrix-table td { padding: 8px 5px; text-align: center; }
+        .matrix-table td:first-child { text-align: left; font-size: 0.85em; padding-right: 10px; min-width: 150px; }
+        .matrix-table tr:nth-child(even) { background: var(--bg); }
+        .matrix-radio { width: 20px; height: 20px; cursor: pointer; accent-color: var(--primary); }
+        
+        .hidden { display: none !important; }
+        
+        @media (max-width: 768px) {
+            .header { flex-direction: column; gap: 12px; text-align: center; padding: 15px; }
+            .header h1 { font-size: 1.2em; }
+            .header-stats { gap: 15px; }
+            .nav { justify-content: center; padding: 10px 15px; }
+            .nav-btn { padding: 8px 16px; font-size: 0.85em; }
+            .container { padding: 15px; }
+            .monitor-grid { grid-template-columns: 1fr; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .lollipop-label { width: 100px; font-size: 0.7em; }
+            .survey-card { padding: 20px; }
+            .likert-option { min-width: 50px; padding: 10px 4px; }
+            .likert-option .number { font-size: 1.1em; }
+        }
+    </style>
+</head>
+<body>
+    <!-- MODO PANEL -->
+    <div id="panelMode">
+        <div class="header">
+            <h1>📊 Encuesta MIR/EIR · Promoción de la Salud</h1>
+            <div class="header-stats">
+                <div class="header-stat"><div class="number" id="headerTotal">0</div><div class="label">Respuestas</div></div>
+                <div class="header-stat"><div class="number" id="headerMir">0</div><div class="label">MIR</div></div>
+                <div class="header-stat"><div class="number" id="headerEir">0</div><div class="label">EIR</div></div>
+            </div>
+        </div>
+        
+        <div class="nav">
+            <button class="nav-btn primary active" onclick="showView('panel')" id="btnPanel">🖥️ Panel</button>
+            <button class="nav-btn success" onclick="showView('resultados')" id="btnResultados">📊 Resultados</button>
+            <button class="nav-btn secondary" onclick="exportData()">📥 Exportar CSV</button>
+            <button class="nav-btn secondary" onclick="generarPDF()">📄 PDF Cuestionario</button>
+        </div>
+        
+        <div class="container">
+            <div class="view active" id="viewPanel">
+                <div class="session-controls">
+                    <button class="session-btn start" id="btnStartSession" onclick="startSession()">▶️ Iniciar Sesión</button>
+                    <button class="session-btn stop" id="btnStopSession" onclick="stopSession()" disabled>⏹️ Cerrar</button>
+                    <button class="session-btn reset" onclick="resetSession()">🔄 Reiniciar</button>
+                    <button class="session-btn" style="background:linear-gradient(135deg,#805ad5,#9f7aea);color:white" onclick="simularDatos()">🧪 Simular 100</button>
+                </div>
+                
+                <div class="session-status waiting" id="sessionStatus">
+                    <div class="status-dot"></div>
+                    <span id="sessionStatusText">Pulsa "Iniciar Sesión" para comenzar</span>
+                </div>
+                
+                <div class="session-status" id="firebaseStatus" style="background:#fefcbf;color:#975a16">
+                    <div class="status-dot" style="background:#d69e2e"></div>
+                    <span id="firebaseStatusText">🔥 Verificando conexión a Firebase...</span>
+                </div>
+                
+                <div class="monitor-grid">
+                    <div class="card qr-section">
+                        <h2>📱 Código QR</h2>
+                        <div class="qr-container" id="qrcode"><div style="width:200px;height:200px;background:#f0f4f8;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#718096;font-size:3em">📱</div></div>
+                        <div class="qr-url" id="surveyUrl">El enlace aparecerá aquí</div>
+                        <div class="qr-instructions"><strong>Instrucciones:</strong><br>1. Inicia sesión · 2. Proyecta el QR · 3. Participantes escanean y rellenan</div>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>📈 Progreso</h2>
+                        <div class="progress-ring-container">
+                            <svg class="progress-ring" viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="42" fill="none" stroke="#e2e8f0" stroke-width="8"/>
+                                <circle id="progressCircle" cx="50" cy="50" r="42" fill="none" stroke="url(#grad)" stroke-width="8" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264" transform="rotate(-90 50 50)"/>
+                                <defs><linearGradient id="grad"><stop offset="0%" stop-color="#2c5282"/><stop offset="100%" stop-color="#4299e1"/></linearGradient></defs>
+                                <text x="50" y="46" class="progress-ring-text" text-anchor="middle" id="progressPercent">0%</text>
+                                <text x="50" y="62" class="progress-ring-label" text-anchor="middle" id="progressCount">0 / 100</text>
+                            </svg>
+                        </div>
+                        <div class="stats-row">
+                            <div class="stat-mini"><div class="icon">🩺</div><div class="value" id="statMir">0</div><div class="label">MIR</div></div>
+                            <div class="stat-mini"><div class="icon">💉</div><div class="value" id="statEir">0</div><div class="label">EIR</div></div>
+                            <div class="stat-mini"><div class="icon">🏛️</div><div class="value" id="statGranada">0</div><div class="label">Granada</div></div>
+                            <div class="stat-mini"><div class="icon">🏘️</div><div class="value" id="statMetro">0</div><div class="label">Metro</div></div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>🔴 En Vivo</h2>
+                        <div class="live-feed" id="liveFeed"><div style="text-align:center;color:var(--text-light);padding:40px">Esperando respuestas...</div></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>📊 Por Año</h2>
+                        <div class="dist-section">
+                            <h4 style="color:var(--primary)">MIR</h4>
+                            <div class="dist-item"><div class="dist-label"><span>R1</span><span id="mirR1">0</span></div><div class="dist-bar"><div class="dist-fill" id="mirR1Bar" style="width:0%;background:var(--primary)"><span></span></div></div></div>
+                            <div class="dist-item"><div class="dist-label"><span>R2</span><span id="mirR2">0</span></div><div class="dist-bar"><div class="dist-fill" id="mirR2Bar" style="width:0%;background:var(--primary)"><span></span></div></div></div>
+                            <div class="dist-item"><div class="dist-label"><span>R3</span><span id="mirR3">0</span></div><div class="dist-bar"><div class="dist-fill" id="mirR3Bar" style="width:0%;background:var(--primary)"><span></span></div></div></div>
+                            <div class="dist-item"><div class="dist-label"><span>R4</span><span id="mirR4">0</span></div><div class="dist-bar"><div class="dist-fill" id="mirR4Bar" style="width:0%;background:var(--primary)"><span></span></div></div></div>
+                            <h4 style="color:#ed8936;margin-top:15px">EIR</h4>
+                            <div class="dist-item"><div class="dist-label"><span>R1</span><span id="eirR1">0</span></div><div class="dist-bar"><div class="dist-fill" id="eirR1Bar" style="width:0%;background:#ed8936"><span></span></div></div></div>
+                            <div class="dist-item"><div class="dist-label"><span>R2</span><span id="eirR2">0</span></div><div class="dist-bar"><div class="dist-fill" id="eirR2Bar" style="width:0%;background:#ed8936"><span></span></div></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="view" id="viewResultados">
+                <div class="results-tabs">
+                    <button class="results-tab active" onclick="showResultsTab('resumen')">📋 Resumen</button>
+                    <button class="results-tab" onclick="showResultsTab('perfil')">👥 Perfil</button>
+                    <button class="results-tab" onclick="showResultsTab('comparativa')">📊 MIR vs EIR</button>
+                    <button class="results-tab" onclick="showResultsTab('sexo')">👩‍⚕️ Por Sexo</button>
+                    <button class="results-tab" onclick="showResultsTab('promotor')">🏆 Promotor Activo</button>
+                    <button class="results-tab" onclick="showResultsTab('formacion')">📚 Formación</button>
+                    <button class="results-tab" onclick="showResultsTab('elementos')">⚙️ Condiciones</button>
+                    <button class="results-tab" onclick="showResultsTab('diagnostico')">🔬 Diagnóstico</button>
+                    <button class="results-tab" onclick="showResultsTab('colaboracion')">🤝 Colaboración</button>
+                    <button class="results-tab" onclick="showResultsTab('epvsa')">🎯 Objetivos EPVSA</button>
+                </div>
+                <div class="results-content active" id="resultsResumen"></div>
+                <div class="results-content" id="resultsPerfil"></div>
+                <div class="results-content" id="resultsComparativa"></div>
+                <div class="results-content" id="resultsSexo"></div>
+                <div class="results-content" id="resultsPromotor"></div>
+                <div class="results-content" id="resultsFormacion"></div>
+                <div class="results-content" id="resultsElementos"></div>
+                <div class="results-content" id="resultsDiagnostico"></div>
+                <div class="results-content" id="resultsColaboracion"></div>
+                <div class="results-content" id="resultsEpvsa"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MODO ENCUESTA -->
+    <div id="surveyMode" class="survey-mode hidden">
+        <div class="header">
+            <h1>📊 Encuesta MIR/EIR</h1>
+        </div>
+        <div class="survey-container">
+            <div class="survey-card">
+                <div class="survey-progress"><div class="survey-progress-fill" id="surveyProgressBar" style="width:0%"></div></div>
+                <div id="surveyContent"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ==================== FIREBASE ====================
+const firebaseConfig = {
+    apiKey: "AIzaSyB2goG1BRWeN9KdCE-DtrikfQ-mHtFCcpI",
+    authDomain: "encuesta-mir-eir.firebaseapp.com",
+    databaseURL: "https://encuesta-mir-eir-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "encuesta-mir-eir",
+    storageBucket: "encuesta-mir-eir.firebasestorage.app",
+    messagingSenderId: "948289575092",
+    appId: "1:948289575092:web:7f5802f0ff45e6cf72dfe1"
+};
+
+// ==================== ESTADO ====================
+let db = null;
+let sessionActive = false;
+let sessionId = null;
+let responses = [];
+const TARGET = 100;
+
+const LABELS = {
+    sexo: { 1: 'Hombre', 2: 'Mujer', 3: 'Otro', 4: 'Prefiero no contestar' },
+    sexo_icon: { 1: '👨', 2: '👩', 3: '🧑', 4: '❓' },
+    sexo_color: { 1: '#2c5282', 2: '#e53e3e', 3: '#805ad5', 4: '#718096' },
+    tipo_residente: { 1: 'MIR (Medicina familiar y comunitaria)', 2: 'EIR (Enfermería familiar y comunitaria)' },
+    anio_mir: { 1: 'R1 (Primer año)', 2: 'R2 (Segundo año)', 3: 'R3 (Tercer año)', 4: 'R4 (Cuarto año)' },
+    anio_eir: { 1: 'R1 (Primer año)', 2: 'R2 (Segundo año)' },
+    distrito: { 0: 'Granada', 1: 'Metropolitano de Granada' },
+    modalidad: { 1: 'Presencial', 2: 'Online', 3: 'Mixta (presencial y online)' },
+    modalidad_icon: { 1: '🏫', 2: '💻', 3: '🔄' },
+    tematicas_formacion: { 1: 'Diseño, planificación y evaluación de intervenciones de promoción de la salud', 2: 'Competencias y habilidades para la intervención grupal en promoción de la salud', 3: 'Estrategias, planes y programas de promoción de la salud en mi centro', 4: 'Métodos y técnicas cuantitativas y cualitativas de investigación, participación y acción en promoción de la salud', 5: 'Otras' },
+    disponibilidad_horaria: { 1: 'En horario laboral', 2: 'Por las tardes', 3: 'En horario flexible según disponibilidad' },
+    objetivo_epvsa: { 1: 'Incrementar los niveles de lactancia materna y el consumo de alimentos saludables', 2: 'Aumentar los niveles de actividad física y disminuir los hábitos sedentarios', 3: 'Incrementar las horas y la calidad del sueño en la población', 4: 'Incrementar la percepción de calidad de vida y de bienestar emocional', 5: 'Incrementar la percepción de satisfacción con las relaciones sexuales', 6: 'Disminuir el tiempo dedicado al uso de aparatos electrónicos en detrimento del tiempo dedicado a familiares y amistades', 7: 'Incrementar las recomendaciones a la ciudadanía sobre activos comunitarios que facilitan una vida saludable', 8: 'Incrementar el número de empresas comprometidas con hábitos saludables y consumo sostenible', 9: 'Incrementar y favorecer la difusión de información sobre hábitos saludables', 10: 'Incrementar la formación y la investigación en promoción de hábitos saludables' },
+    objetivo_epvsa_icon: { 1: '🤱', 2: '🏃', 3: '😴', 4: '😊', 5: '❤️', 6: '📱', 7: '🏘️', 8: '🏢', 9: '📢', 10: '🎓' },
+    elementos: { 
+        elem_cultura: 'Existe una cultura favorable a la promoción de la salud en Atención Primaria', 
+        elem_tiempo: 'Dispongo de tiempo suficiente en mi agenda para actividades de promoción de la salud', 
+        elem_habilidades: 'Cuento con las habilidades y competencias necesarias para desarrollar actividades de promoción de la salud', 
+        elem_espacios: 'Dispongo de espacios adecuados para realizar intervenciones de promoción de la salud', 
+        elem_materiales: 'Dispongo de materiales y recursos suficientes para las intervenciones', 
+        elem_acceso: 'Tengo acceso adecuado a la población diana para las intervenciones', 
+        elem_colaboracion: 'Existe buena colaboración con otros profesionales para desarrollar actividades de promoción de la salud', 
+        elem_recursos_ped: 'Cuento con recursos pedagógicos y materiales didácticos adecuados', 
+        elem_plan_formacion: 'El plan de formación docente responde a mis necesidades en materia de promoción de la salud', 
+        elem_tutor: 'Mi tutor/a facilita y apoya el desarrollo de actividades de promoción de la salud'
+    },
+    elementos_corto: { elem_cultura: 'Cultura Promoción', elem_tiempo: 'Tiempo agenda', elem_habilidades: 'Habilidades', elem_espacios: 'Espacios', elem_materiales: 'Materiales', elem_acceso: 'Acceso población', elem_colaboracion: 'Colaboración', elem_recursos_ped: 'Recursos pedagógicos', elem_plan_formacion: 'Plan formación', elem_tutor: 'Apoyo tutor' },
+    diagnostico: {
+        diag_caract_poblacion: 'Conozco las características sociodemográficas de la población de referencia de mi UGC',
+        diag_morbimortalidad: 'Conozco la situación de salud (morbimortalidad) de la población de referencia de mi UGC',
+        diag_objetivos: 'Conozco los objetivos de promoción de la salud incluidos en los acuerdos de gestión de mi UGC'
+    },
+    diagnostico_corto: { diag_caract_poblacion: 'Características población', diag_morbimortalidad: 'Morbimortalidad', diag_objetivos: 'Objetivos UGC' },
+    colaboracion_externa: { 1: 'Administración autonómica presente en el territorio', 2: 'Administración local (Ayuntamiento, Mancomunidad, Diputación)', 3: 'Tejido social (Asociaciones de familiares, de pacientes, ONGs...)', 4: 'Centros de Participación Activa (autonómicos y municipales)', 5: 'Centros de Educación de Adultos', 6: 'Puntos Vuela', 7: 'Centros educativos' },
+    colaboracion_externa_icon: { 1: '🏛️', 2: '🏢', 3: '🤲', 4: '👴', 5: '📖', 6: '✈️', 7: '🏫' },
+    colaboracion_profesionales: { 1: 'Director/a de la UGC', 2: 'Coordinador/a de Cuidados de Enfermería', 3: 'Profesionales de Medicina Familiar y Comunitaria (MFYC)', 4: 'Profesionales de Enfermería Familiar y Comunitaria (EFYC)', 5: 'Profesionales de Enfermería Referente de Centro Educativo (ERCE)', 6: 'Profesionales de Trabajo Social (TS)', 7: 'Profesionales de Fisioterapia', 8: 'Profesionales de Terapia Ocupacional (TO)', 9: 'Profesionales de la Enfermería Gestora de Casos', 10: 'Profesionales del Dispositivo de Cuidados Críticos y Urgencias (DDCCUU)', 11: 'Profesionales de Pediatría' },
+    colaboracion_profesionales_icon: { 1: '👔', 2: '👩‍⚕️', 3: '⚕️', 4: '💉', 5: '🏫', 6: '🤝', 7: '🦿', 8: '🧩', 9: '📋', 10: '🚑', 11: '👶' },
+    ugc_granada: { 1: 'Albayzín', 2: 'Almanjáyar', 3: 'Bola de Oro', 4: 'Caleta', 5: 'Cartuja', 6: 'Casería de Montijo', 7: 'Chana', 8: 'Doctores', 9: 'Flores-Fígares', 10: 'Fortuny/Velluti', 11: 'Góngora', 12: 'Gran Capitán', 13: 'Realejo', 14: 'Zaidín Centro-Este', 15: 'Zaidín Sur' },
+    ugc_metropolitano: { 1: 'Albolote', 2: 'Alfacar', 3: 'Alhama de Granada', 4: 'Armilla', 5: 'Atarfe', 6: 'Cenes de la Vega', 7: 'Churriana de la Vega', 8: 'Huétor-Tájar', 9: 'Huétor-Vega', 10: 'Íllora', 11: 'Iznalloz', 12: 'La Zubia', 13: 'Las Gabias', 14: 'Loja', 15: 'Maracena', 16: 'Montefrío', 17: 'Ogíjares', 18: 'Peligros', 19: 'Pinos Puente', 20: 'Santa Fe', 21: 'Valle de Lecrín' },
+    likert_acuerdo: ['Muy en desacuerdo', 'En desacuerdo', 'Ni de acuerdo ni en desacuerdo', 'De acuerdo', 'Muy de acuerdo'],
+    escala_aspectos: ['Muy deficiente', '', '', '', '', '', '', '', '', 'Excelente'],
+    likert_frecuencia: ['Nunca', 'Casi nunca', 'A veces', 'A menudo', 'Siempre'],
+    likert_calidad: ['Muy deficiente', 'Deficiente', 'Aceptable', 'Buena', 'Excelente'],
+    likert_aplicabilidad: ['Totalmente insuficiente', 'Insuficiente', 'Adecuada', 'Suficiente', 'Totalmente suficiente']
+};
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', function() {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    
+    // Verificar conexión a Firebase
+    const connectedRef = db.ref('.info/connected');
+    connectedRef.on('value', (snap) => {
+        const fbStatus = document.getElementById('firebaseStatus');
+        const fbText = document.getElementById('firebaseStatusText');
+        if (fbStatus && fbText) {
+            if (snap.val() === true) {
+                fbStatus.style.background = '#c6f6d5';
+                fbStatus.style.color = '#276749';
+                fbStatus.querySelector('.status-dot').style.background = '#38a169';
+                fbText.textContent = '🔥 Firebase conectado · Los datos se guardarán correctamente';
+            } else {
+                fbStatus.style.background = '#fed7d7';
+                fbStatus.style.color = '#c53030';
+                fbStatus.querySelector('.status-dot').style.background = '#e53e3e';
+                fbText.textContent = '⚠️ Sin conexión a Firebase · Los datos NO se guardarán';
+            }
+        }
+    });
+    
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('s')) {
+        sessionId = params.get('s');
+        document.getElementById('panelMode').classList.add('hidden');
+        document.getElementById('surveyMode').classList.remove('hidden');
+        renderSurvey();
+    } else {
+        // Restaurar sesión guardada si existe
+        const savedSession = localStorage.getItem('mireir_sessionId');
+        if (savedSession) {
+            restoreSession(savedSession);
+        }
+        updateAllStats();
+    }
+});
+
+// ==================== NAVEGACIÓN ====================
+function showView(view) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('view' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+    document.getElementById('btn' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+    if (view === 'resultados') renderAllResults();
+}
+
+function showResultsTab(tab) {
+    document.querySelectorAll('.results-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.results-content').forEach(c => c.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('results' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+}
+
+// ==================== SESIÓN ====================
+function startSession() {
+    sessionActive = true;
+    sessionId = Date.now().toString(36);
+    localStorage.setItem('mireir_sessionId', sessionId);
+    
+    document.getElementById('btnStartSession').disabled = true;
+    document.getElementById('btnStopSession').disabled = false;
+    
+    const status = document.getElementById('sessionStatus');
+    status.className = 'session-status active';
+    document.getElementById('sessionStatusText').textContent = 'Sesión activa · ' + sessionId;
+    
+    const surveyUrl = window.location.origin + window.location.pathname + '?s=' + sessionId;
+    document.getElementById('surveyUrl').textContent = surveyUrl;
+    document.getElementById('qrcode').innerHTML = '';
+    new QRCode(document.getElementById('qrcode'), { text: surveyUrl, width: 200, height: 200, colorDark: '#1a365d', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+    
+    setupFirebaseListener();
+}
+
+function restoreSession(sid) {
+    sessionActive = true;
+    sessionId = sid;
+    
+    document.getElementById('btnStartSession').disabled = true;
+    document.getElementById('btnStopSession').disabled = false;
+    
+    const status = document.getElementById('sessionStatus');
+    status.className = 'session-status active';
+    document.getElementById('sessionStatusText').textContent = 'Reconectando · ' + sessionId;
+    
+    const surveyUrl = window.location.origin + window.location.pathname + '?s=' + sessionId;
+    document.getElementById('surveyUrl').textContent = surveyUrl;
+    document.getElementById('qrcode').innerHTML = '';
+    new QRCode(document.getElementById('qrcode'), { text: surveyUrl, width: 200, height: 200, colorDark: '#1a365d', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+    
+    // Cargar TODAS las respuestas existentes primero
+    db.ref('encuestas_mireir/' + sessionId + '/responses').once('value', snapshot => {
+        responses = [];
+        if (snapshot.exists()) {
+            snapshot.forEach(child => {
+                responses.push(child.val());
+            });
+        }
+        updateAllStats();
+        document.getElementById('sessionStatusText').textContent = 'Sesión activa · ' + sessionId + ' · ' + responses.length + ' respuestas';
+        
+        // Luego configurar listener para nuevas respuestas
+        setupFirebaseListener();
+    });
+}
+
+function setupFirebaseListener() {
+    db.ref('encuestas_mireir/' + sessionId + '/responses').on('child_added', snapshot => {
+        const r = snapshot.val();
+        if (!responses.find(x => x.id === r.id)) {
+            responses.push(r);
+            addLiveFeedItem(r);
+            updateAllStats();
+        }
+    });
+}
+
+function stopSession() {
+    sessionActive = false;
+    document.getElementById('btnStartSession').disabled = false;
+    document.getElementById('btnStopSession').disabled = true;
+    const status = document.getElementById('sessionStatus');
+    status.className = 'session-status inactive';
+    document.getElementById('sessionStatusText').textContent = 'Sesión cerrada · ' + responses.length + ' respuestas';
+}
+
+function resetSession() {
+    if (!confirm('¿Borrar todos los datos?')) return;
+    if (sessionId) {
+        db.ref('encuestas_mireir/' + sessionId + '/responses').off();
+        db.ref('encuestas_mireir/' + sessionId).remove();
+    }
+    localStorage.removeItem('mireir_sessionId');
+    responses = [];
+    sessionActive = false;
+    sessionId = null;
+    document.getElementById('btnStartSession').disabled = false;
+    document.getElementById('btnStopSession').disabled = true;
+    document.getElementById('sessionStatus').className = 'session-status waiting';
+    document.getElementById('sessionStatusText').textContent = 'Pulsa "Iniciar Sesión" para comenzar';
+    document.getElementById('qrcode').innerHTML = '<div style="width:200px;height:200px;background:#f0f4f8;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#718096;font-size:3em">📱</div>';
+    document.getElementById('surveyUrl').textContent = 'El enlace aparecerá aquí';
+    document.getElementById('liveFeed').innerHTML = '<div style="text-align:center;color:var(--text-light);padding:40px">Esperando respuestas...</div>';
+    updateAllStats();
+}
+
+// ==================== LIVE FEED ====================
+function addLiveFeedItem(r) {
+    const feed = document.getElementById('liveFeed');
+    if (feed.querySelector('div[style*="text-align:center"]')) feed.innerHTML = '';
+    const tipo = r.tipo_residente == 1 ? 'mir' : 'eir';
+    const tipoLabel = r.tipo_residente == 1 ? 'MIR' : 'EIR';
+    const anio = r.tipo_residente == 1 ? r.anio_residencia_mir : r.anio_residencia_eir;
+    const distrito = LABELS.distrito[r.distrito] || '';
+    const time = new Date(r.timestamp || Date.now()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const item = document.createElement('div');
+    item.className = 'live-item';
+    item.innerHTML = `<div class="icon ${tipo}">${tipo === 'mir' ? '🩺' : '💉'}</div><div class="info"><div class="name">${tipoLabel} R${anio || '?'}</div><div class="meta">${distrito}</div></div><div class="time">${time}</div>`;
+    feed.insertBefore(item, feed.firstChild);
+    while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+
+// ==================== STATS ====================
+function updateAllStats() {
+    const n = responses.length;
+    const mir = responses.filter(r => r.tipo_residente == 1);
+    const eir = responses.filter(r => r.tipo_residente == 2);
+    const granada = responses.filter(r => r.distrito == 0).length;
+    const metro = responses.filter(r => r.distrito == 1).length;
+    
+    document.getElementById('headerTotal').textContent = n;
+    document.getElementById('headerMir').textContent = mir.length;
+    document.getElementById('headerEir').textContent = eir.length;
+    
+    const pct = Math.min(100, (n / TARGET) * 100);
+    document.getElementById('progressCircle').style.strokeDashoffset = 264 - (264 * pct / 100);
+    document.getElementById('progressPercent').textContent = Math.round(pct) + '%';
+    document.getElementById('progressCount').textContent = n + ' / ' + TARGET;
+    
+    document.getElementById('statMir').textContent = mir.length;
+    document.getElementById('statEir').textContent = eir.length;
+    document.getElementById('statGranada').textContent = granada;
+    document.getElementById('statMetro').textContent = metro;
+    
+    const mT = mir.length || 1, eT = eir.length || 1;
+    for (let i = 1; i <= 4; i++) { const c = mir.filter(r => r.anio_residencia_mir == i).length; document.getElementById('mirR' + i).textContent = c; document.getElementById('mirR' + i + 'Bar').style.width = (c / mT * 100) + '%'; }
+    for (let i = 1; i <= 2; i++) { const c = eir.filter(r => r.anio_residencia_eir == i).length; document.getElementById('eirR' + i).textContent = c; document.getElementById('eirR' + i + 'Bar').style.width = (c / eT * 100) + '%'; }
+}
+
+// ==================== ENCUESTA ====================
+let currentSection = 0;
+let surveyData = {};
+
+const SURVEY_SECTIONS = [
+    { title: 'Datos sociodemográficos', questions: [
+        { id: 'sexo', label: 'Sexo', type: 'radio', options: LABELS.sexo },
+        { id: 'edad', label: 'Edad (años)', type: 'number', min: 20, max: 70, note: 'Indica tu edad en años' },
+        { id: 'tipo_residente', label: 'Tipo de residente', type: 'radio', options: LABELS.tipo_residente },
+        { id: 'anio_residencia', label: 'Año de residencia', type: 'dynamic' },
+        { id: 'distrito', label: 'Distrito', type: 'radio', options: LABELS.distrito },
+        { id: 'ugc', label: 'Unidad de Gestión Clínica', type: 'dynamic' }
+    ]},
+    { title: 'Formación en Promoción de la Salud', questions: [
+        { id: 'participacion_promocion', label: 'Indica con qué frecuencia participas en actividades de promoción de la salud en tu Unidad de Gestión Clínica', type: 'likert', scale: LABELS.likert_frecuencia },
+        { id: 'valoracion_formacion', label: 'Valora la calidad de la formación que recibiste durante el período de formación de Grado', type: 'likert', scale: LABELS.likert_calidad },
+        { id: 'valoracion_formacion_2', label: 'Valora la calidad de la formación que has recibido hasta el momento durante tu residencia', type: 'likert', scale: LABELS.likert_calidad },
+        { id: 'aplicabilidad_formacion', label: 'Valora en qué medida la formación recibida hasta el momento en promoción de la salud es aplicable a tu práctica profesional', type: 'likert', scale: LABELS.likert_aplicabilidad },
+        { id: 'tematicas_formacion', label: 'Selecciona todas aquellas temáticas sobre las cuales te gustaría recibir formación', type: 'checkbox', options: LABELS.tematicas_formacion },
+        { id: 'tematicas_otras', label: 'Especifica otras temáticas de interés', type: 'text', note: 'Indica otras temáticas formativas que sean de tu interés', conditional: 'tematicas_formacion___5' },
+        { id: 'disponibilidad_horaria', label: 'Selecciona tu disponibilidad horaria para recibir formación', type: 'checkbox', options: LABELS.disponibilidad_horaria },
+        { id: 'modalidad_formacion', label: 'Indica qué modalidad de formación prefieres', type: 'radio', options: LABELS.modalidad }
+    ]},
+    { title: 'Objetivos estratégicos de la Estrategia de Promoción de una Vida Saludable en Andalucía (EPVSA)', questions: [
+        { id: 'objetivo_epvsa', label: 'Selecciona de entre los siguientes el objetivo que sea de mayor interés para ti', type: 'radio', options: LABELS.objetivo_epvsa }
+    ]},
+    { title: 'Condiciones para tu intervención en promoción de la salud', questions: [
+        { id: 'elementos', label: 'Valora las distintas condiciones relacionadas con la promoción de la salud durante tu tiempo de residencia en un centro de Atención Primaria (1 = Muy deficiente, 10 = Excelente):', type: 'matrix', items: LABELS.elementos, scale: LABELS.escala_aspectos }
+    ]},
+    { title: 'Diagnóstico comunitario', questions: [
+        { id: 'diagnostico', label: 'Indica tu grado de acuerdo con las siguientes afirmaciones:', type: 'matrix', items: LABELS.diagnostico, scale: LABELS.likert_acuerdo },
+        { id: 'colaboracion_externa', label: 'Indica con cuál o cuáles de las siguientes organizaciones has colaborado en promoción de la salud', type: 'checkbox', options: LABELS.colaboracion_externa },
+        { id: 'colaboracion_profesionales', label: 'En el caso de haberlo hecho, ¿con qué profesionales has colaborado en promoción de la salud?', type: 'checkbox', options: LABELS.colaboracion_profesionales },
+        { id: 'comentarios_adicionales', label: '¿Hay alguna otra cosa sobre la cual no te hayamos preguntado y sobre la cual te gustaría comentar algo?', type: 'textarea' }
+    ]}
+];
+
+function renderSurvey() { renderSurveySection(); }
+
+function renderSurveySection() {
+    const section = SURVEY_SECTIONS[currentSection];
+    const progress = ((currentSection + 1) / SURVEY_SECTIONS.length) * 100;
+    document.getElementById('surveyProgressBar').style.width = progress + '%';
+    
+    let html = `<div class="survey-section"><h3>${currentSection + 1}/${SURVEY_SECTIONS.length}. ${section.title}</h3>`;
+    section.questions.forEach(q => html += renderQuestion(q));
+    html += '</div>';
+    html += `<div class="survey-nav">
+        <button class="survey-btn prev" onclick="prevSection()" ${currentSection === 0 ? 'disabled' : ''}>← Anterior</button>
+        ${currentSection === SURVEY_SECTIONS.length - 1 ? '<button class="survey-btn submit" onclick="submitSurvey()">Enviar ✓</button>' : '<button class="survey-btn next" onclick="nextSection()">Siguiente →</button>'}
+    </div>`;
+    document.getElementById('surveyContent').innerHTML = html;
+}
+
+function renderQuestion(q) {
+    // Verificar condicional
+    if (q.conditional && surveyData[q.conditional] != 1) {
+        return '';
+    }
+    
+    let html = `<div class="survey-question">`;
+    if (q.type === 'radio') {
+        html += `<label>${q.label}</label><div class="radio-group">`;
+        Object.entries(q.options).forEach(([val, text]) => {
+            html += `<div class="radio-option ${surveyData[q.id] == val ? 'selected' : ''}" onclick="selectRadio('${q.id}', ${val}, this)"><input type="radio" name="${q.id}" value="${val}"><span>${text}</span></div>`;
+        });
+        html += '</div>';
+    } else if (q.type === 'number') {
+        html += `<label>${q.label}</label>`;
+        if (q.note) html += `<div style="font-size:0.85em;color:var(--text-light);margin-bottom:8px">${q.note}</div>`;
+        html += `<input type="number" class="survey-select" min="${q.min || ''}" max="${q.max || ''}" value="${surveyData[q.id] || ''}" onchange="surveyData['${q.id}']=this.value" style="max-width:150px">`;
+    } else if (q.type === 'text') {
+        html += `<label>${q.label}</label>`;
+        if (q.note) html += `<div style="font-size:0.85em;color:var(--text-light);margin-bottom:8px">${q.note}</div>`;
+        html += `<input type="text" class="survey-select" value="${surveyData[q.id] || ''}" onchange="surveyData['${q.id}']=this.value">`;
+    } else if (q.type === 'textarea') {
+        html += `<label>${q.label}</label>`;
+        html += `<textarea class="survey-select" rows="4" style="resize:vertical" onchange="surveyData['${q.id}']=this.value">${surveyData[q.id] || ''}</textarea>`;
+    } else if (q.type === 'likert') {
+        html += `<label>${q.label}</label><div class="likert-scale">`;
+        q.scale.forEach((text, i) => {
+            const val = i + 1;
+            html += `<div class="likert-option ${surveyData[q.id] == val ? 'selected' : ''}" onclick="selectLikert('${q.id}', ${val}, this)"><div class="number">${val}</div><div class="text">${text}</div></div>`;
+        });
+        html += '</div>';
+    } else if (q.type === 'checkbox') {
+        html += `<label>${q.label}</label><div class="checkbox-group">`;
+        Object.entries(q.options).forEach(([val, text]) => {
+            html += `<div class="checkbox-option ${surveyData[`${q.id}___${val}`] == 1 ? 'selected' : ''}" onclick="toggleCheckbox('${q.id}', ${val}, this)"><span>${val}. ${text}</span></div>`;
+        });
+        html += '</div>';
+    } else if (q.type === 'matrix') {
+        html += `<label>${q.label}</label><div class="matrix-container"><table class="matrix-table"><tr><th></th>${q.scale.map((s, i) => `<th>${i + 1}${s ? '<br><small>' + s + '</small>' : ''}</th>`).join('')}</tr>`;
+        Object.entries(q.items).forEach(([key, text]) => {
+            html += `<tr><td>${text}</td>`;
+            for (let i = 1; i <= q.scale.length; i++) html += `<td><input type="radio" class="matrix-radio" name="${key}" value="${i}" ${surveyData[key] == i ? 'checked' : ''} onchange="surveyData['${key}']=${i}"></td>`;
+            html += '</tr>';
+        });
+        html += '</table></div>';
+        html += '</table></div>';
+    } else if (q.type === 'dynamic' && q.id === 'anio_residencia') {
+        const tipo = surveyData.tipo_residente;
+        if (tipo == 1) {
+            html += `<label>Año de residencia MIR</label><div class="radio-group">`;
+            Object.entries(LABELS.anio_mir).forEach(([v, t]) => { html += `<div class="radio-option ${surveyData.anio_residencia_mir == v ? 'selected' : ''}" onclick="selectRadio('anio_residencia_mir', ${v}, this)"><input type="radio"><span>${t}</span></div>`; });
+            html += '</div>';
+        } else if (tipo == 2) {
+            html += `<label>Año de residencia EIR</label><div class="radio-group">`;
+            Object.entries(LABELS.anio_eir).forEach(([v, t]) => { html += `<div class="radio-option ${surveyData.anio_residencia_eir == v ? 'selected' : ''}" onclick="selectRadio('anio_residencia_eir', ${v}, this)"><input type="radio"><span>${t}</span></div>`; });
+            html += '</div>';
+        } else html += '<p style="color:var(--text-light);font-style:italic">Selecciona primero el tipo de residente</p>';
+    } else if (q.type === 'dynamic' && q.id === 'ugc') {
+        const d = surveyData.distrito;
+        const list = d == 0 ? LABELS.ugc_granada : d == 1 ? LABELS.ugc_metropolitano : null;
+        if (list) {
+            const f = d == 0 ? 'ugc_granada' : 'ugc_metropolitano';
+            html += `<label>Unidad de Gestión Clínica</label><div style="font-size:0.85em;color:var(--text-light);margin-bottom:8px">Selecciona la UGC donde realizas tu residencia</div><select class="survey-select" onchange="surveyData['${f}']=this.value"><option value="">Selecciona tu UGC...</option>${Object.entries(list).map(([v, t]) => `<option value="${v}" ${surveyData[f] == v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+        } else html += '<p style="color:var(--text-light);font-style:italic">Selecciona primero el distrito</p>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function selectRadio(f, v, el) { surveyData[f] = v; el.parentElement.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected')); el.classList.add('selected'); if (f === 'tipo_residente' || f === 'distrito' || f.startsWith('tematicas')) setTimeout(renderSurveySection, 50); }
+function selectLikert(f, v, el) { surveyData[f] = v; el.parentElement.querySelectorAll('.likert-option').forEach(o => o.classList.remove('selected')); el.classList.add('selected'); }
+function toggleCheckbox(f, v, el) { const k = `${f}___${v}`; surveyData[k] = surveyData[k] == 1 ? 0 : 1; el.classList.toggle('selected'); if (f === 'tematicas_formacion') setTimeout(renderSurveySection, 50); }
+function nextSection() { if (currentSection < SURVEY_SECTIONS.length - 1) { currentSection++; renderSurveySection(); window.scrollTo(0, 0); } }
+function prevSection() { if (currentSection > 0) { currentSection--; renderSurveySection(); window.scrollTo(0, 0); } }
+
+function submitSurvey() {
+    surveyData.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    surveyData.timestamp = Date.now();
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get('s') || 'default';
+    db.ref('encuestas_mireir/' + sid + '/responses').push(surveyData);
+    document.getElementById('surveyContent').innerHTML = `<div class="survey-complete"><div class="icon">✅</div><h2>¡Gracias por participar!</h2><p>Tu respuesta ha sido registrada correctamente.</p></div>`;
+}
+
+// ==================== RESULTADOS ====================
+function renderAllResults() {
+    if (responses.length === 0) {
+        ['Resumen', 'Perfil', 'Comparativa', 'Sexo', 'Promotor', 'Formacion', 'Elementos', 'Diagnostico', 'Colaboracion', 'Epvsa'].forEach(t => {
+            document.getElementById('results' + t).innerHTML = '<div class="card"><p style="text-align:center;color:var(--text-light);padding:40px">No hay respuestas todavía</p></div>';
+        });
+        return;
+    }
+    renderResultsResumen();
+    renderResultsPerfil();
+    renderResultsComparativa();
+    renderResultsSexo();
+    renderResultsPromotor();
+    renderResultsFormacion();
+    renderResultsElementos();
+    renderResultsDiagnostico();
+    renderResultsColaboracion();
+    renderResultsEpvsa();
+}
+
+function calcMedia(f) { const v = responses.map(r => parseFloat(r[f])).filter(x => x && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
+function getColor(v) { return v >= 3.5 ? '#38a169' : v >= 2.5 ? '#d69e2e' : '#e53e3e'; }
+function getColor10(v) { return v >= 7 ? '#38a169' : v >= 5 ? '#d69e2e' : '#e53e3e'; }
+function gaugeSVG(v) { const p = (v / 5) * 100; return `<svg class="gauge-svg" viewBox="0 0 100 60"><path d="M10 55 A40 40 0 0 1 90 55" fill="none" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round"/><path d="M10 55 A40 40 0 0 1 90 55" fill="none" stroke="url(#gg)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${p * 1.26} 126"/><defs><linearGradient id="gg"><stop offset="0%" stop-color="#e53e3e"/><stop offset="50%" stop-color="#d69e2e"/><stop offset="100%" stop-color="#38a169"/></linearGradient></defs></svg>`; }
+
+function renderResultsResumen() {
+    const mP = calcMedia('participacion_promocion'), mG = calcMedia('valoracion_formacion'), mR = calcMedia('valoracion_formacion_2'), mA = calcMedia('aplicabilidad_formacion');
+    const elemItems = Object.entries(LABELS.elementos_corto).map(([k, v]) => ({ label: v, value: calcMedia(k) })).sort((a, b) => a.value - b.value);
+    
+    // Generar análisis descriptivo
+    const nivelParticipacion = mP >= 4 ? 'alta' : mP >= 3 ? 'moderada' : mP >= 2 ? 'baja' : 'muy baja';
+    const diffFormacion = mR - mG;
+    const aspectosBajos = elemItems.filter(i => i.value < 5);
+    
+    let analisis = `<div style="background:#f0f4f8;border-radius:10px;padding:15px;margin-top:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> La participación en promoción de la salud se sitúa en ${mP.toFixed(1)}/5 (<strong>${nivelParticipacion}</strong>). `;
+    
+    // Solo comentar diferencia si es apreciable (>0.3 puntos)
+    if (Math.abs(diffFormacion) >= 0.3) {
+        if (diffFormacion > 0) {
+            analisis += `La formación en Residencia (${mR.toFixed(1)}) se valora ${diffFormacion.toFixed(1)} puntos por encima de la del Grado (${mG.toFixed(1)}). `;
+        } else {
+            analisis += `La formación en Residencia (${mR.toFixed(1)}) se valora ${Math.abs(diffFormacion).toFixed(1)} puntos por debajo de la del Grado (${mG.toFixed(1)}). `;
+        }
+    } else {
+        analisis += `La valoración de la formación en Grado (${mG.toFixed(1)}) y Residencia (${mR.toFixed(1)}) es similar. `;
+    }
+    
+    analisis += `La aplicabilidad de la formación recibida obtiene un ${mA.toFixed(1)}/5. `;
+    
+    if (aspectosBajos.length > 0) {
+        analisis += `<br><br><strong>${aspectosBajos.length} condición(es)</strong> obtienen puntuación inferior a 5/10: ${aspectosBajos.slice(0, 3).map(i => i.label.toLowerCase()).join(', ')}${aspectosBajos.length > 3 ? '...' : ''}.`;
+    } else {
+        analisis += `Todas las condiciones superan la puntuación de 5/10.`;
+    }
+    analisis += '</div>';
+    
+    document.getElementById('resultsResumen').innerHTML = `
+        <div class="card"><h2>📊 Indicadores principales</h2>
+            <div class="gauge-row">
+                <div class="gauge-item">${gaugeSVG(mP)}<div class="gauge-value">${mP.toFixed(1)}</div><div class="gauge-label">Participación</div><div style="font-size:0.65em;color:#718096">(1-5)</div></div>
+                <div class="gauge-item">${gaugeSVG(mG)}<div class="gauge-value">${mG.toFixed(1)}</div><div class="gauge-label">Form. Grado</div><div style="font-size:0.65em;color:#718096">(1-5)</div></div>
+                <div class="gauge-item">${gaugeSVG(mR)}<div class="gauge-value">${mR.toFixed(1)}</div><div class="gauge-label">Form. Residencia</div><div style="font-size:0.65em;color:#718096">(1-5)</div></div>
+                <div class="gauge-item">${gaugeSVG(mA)}<div class="gauge-value">${mA.toFixed(1)}</div><div class="gauge-label">Aplicabilidad</div><div style="font-size:0.65em;color:#718096">(1-5)</div></div>
+            </div>
+            ${analisis}
+        </div>
+        <div class="card"><h2>⚠️ Condiciones con menor puntuación</h2>
+            <p style="color:var(--text-light);margin-bottom:10px;font-size:0.85em">Escala 1-10 (1 = Muy deficiente, 10 = Excelente)</p>
+            ${elemItems.slice(0, 5).map(i => { const p = (i.value / 10) * 100, c = getColor10(i.value); return `<div class="lollipop-item"><div class="lollipop-label">${i.label}</div><div class="lollipop-track"><div class="lollipop-line" style="width:${p}%;background:${c}"></div><div class="lollipop-dot" style="left:calc(${p}% - 12px);background:${c}">${i.value.toFixed(1)}</div></div></div>`; }).join('')}
+        </div>`;
+}
+
+function renderResultsPerfil() {
+    const n = responses.length;
+    const sexoCounts = {}, tipoCounts = {}, distritoCounts = {};
+    responses.forEach(r => {
+        sexoCounts[r.sexo] = (sexoCounts[r.sexo] || 0) + 1;
+        tipoCounts[r.tipo_residente] = (tipoCounts[r.tipo_residente] || 0) + 1;
+        distritoCounts[r.distrito] = (distritoCounts[r.distrito] || 0) + 1;
+    });
+    
+    // Pictogram
+    let pictoHtml = '<div class="pictogram">';
+    Object.entries(sexoCounts).forEach(([k, v]) => { for (let i = 0; i < v; i++) pictoHtml += `<span class="pictogram-icon" style="color:${LABELS.sexo_color[k]}">${LABELS.sexo_icon[k]}</span>`; });
+    pictoHtml += '</div><div class="pictogram-legend">';
+    Object.entries(sexoCounts).forEach(([k, v]) => { pictoHtml += `<div class="pictogram-legend-item"><span style="color:${LABELS.sexo_color[k]}">${LABELS.sexo_icon[k]}</span> ${LABELS.sexo[k]}: ${v} (${(v/n*100).toFixed(0)}%)</div>`; });
+    pictoHtml += '</div>';
+    
+    // Waffle tipo
+    let waffleTipo = '<div class="waffle">';
+    const mirPct = Math.round(((tipoCounts[1] || 0) / n) * 100);
+    for (let i = 0; i < 100; i++) waffleTipo += `<div class="waffle-cell" style="background:${i < mirPct ? '#2c5282' : '#ed8936'}"></div>`;
+    waffleTipo += `</div><div class="waffle-legend"><div class="waffle-legend-item"><div class="waffle-legend-color" style="background:#2c5282"></div>MIR ${mirPct}%</div><div class="waffle-legend-item"><div class="waffle-legend-color" style="background:#ed8936"></div>EIR ${100 - mirPct}%</div></div>`;
+    
+    // Waffle distrito
+    let waffleDist = '<div class="waffle">';
+    const grPct = Math.round(((distritoCounts[0] || 0) / n) * 100);
+    for (let i = 0; i < 100; i++) waffleDist += `<div class="waffle-cell" style="background:${i < grPct ? '#38a169' : '#d69e2e'}"></div>`;
+    waffleDist += `</div><div class="waffle-legend"><div class="waffle-legend-item"><div class="waffle-legend-color" style="background:#38a169"></div>Granada ${grPct}%</div><div class="waffle-legend-item"><div class="waffle-legend-color" style="background:#d69e2e"></div>Metropolitano ${100 - grPct}%</div></div>`;
+    
+    // Análisis descriptivo
+    const nMujeres = sexoCounts[2] || 0;
+    const nHombres = sexoCounts[1] || 0;
+    const pctMujeres = (nMujeres / n * 100).toFixed(0);
+    const nMir = tipoCounts[1] || 0;
+    const nEir = tipoCounts[2] || 0;
+    
+    let analisisPerfil = `<div class="card"><div style="background:#f0f4f8;border-radius:10px;padding:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> Muestra de <strong>${n} residentes</strong>: ${nMujeres} mujeres (${pctMujeres}%) y ${nHombres} hombres (${(100-pctMujeres)}%). `;
+    analisisPerfil += `Por tipo: ${nMir} MIR (${mirPct}%) y ${nEir} EIR (${100-mirPct}%). `;
+    analisisPerfil += `Por distrito: Granada ${grPct}% y Metropolitano ${100-grPct}%.`;
+    analisisPerfil += '</div></div>';
+    
+    document.getElementById('resultsPerfil').innerHTML = `
+        <div class="card"><h2>👥 Distribución por sexo</h2>${pictoHtml}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px">
+            <div class="card"><h2>🎓 Tipo de residente</h2>${waffleTipo}</div>
+            <div class="card"><h2>📍 Distrito</h2>${waffleDist}</div>
+        </div>
+        ${analisisPerfil}`;
+}
+
+function renderResultsFormacion() {
+    const modCounts = {};
+    responses.forEach(r => { if (r.modalidad_formacion) modCounts[r.modalidad_formacion] = (modCounts[r.modalidad_formacion] || 0) + 1; });
+    const n = responses.length || 1;
+    
+    // Ordenar por porcentaje descendente
+    const modSorted = Object.entries(LABELS.modalidad).map(([k, v]) => ({ k, v, p: ((modCounts[k] || 0) / n * 100) })).sort((a, b) => b.p - a.p);
+    
+    // Análisis descriptivo
+    let analisisFormacion = `<div style="background:#f0f4f8;border-radius:10px;padding:15px;margin-top:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> Preferencias de modalidad formativa: `;
+    analisisFormacion += modSorted.map(m => `<strong>${m.v}</strong> ${m.p.toFixed(0)}%`).join(', ') + '.';
+    analisisFormacion += '</div>';
+    
+    document.getElementById('resultsFormacion').innerHTML = `
+        <div class="card"><h2>🎓 Modalidad preferida</h2>
+            <div style="display:flex;justify-content:space-around;margin:30px 0">
+                ${modSorted.map(item => `<div style="text-align:center"><div style="font-size:3em">${LABELS.modalidad_icon[item.k]}</div><div style="font-size:2em;font-weight:700;color:var(--primary)">${item.p.toFixed(0)}%</div><div style="color:var(--text-light)">${item.v}</div></div>`).join('')}
+            </div>
+            ${analisisFormacion}
+        </div>`;
+}
+
+function renderResultsElementos() {
+    const items = Object.entries(LABELS.elementos_corto).map(([k, v]) => ({ label: v, value: calcMedia(k) })).sort((a, b) => b.value - a.value);
+    
+    // Análisis descriptivo
+    const mejorAspecto = items[0];
+    const peorAspecto = items[items.length - 1];
+    const mediaGeneral = items.reduce((a, b) => a + b.value, 0) / items.length;
+    const aspectosBajos = items.filter(i => i.value < 5);
+    const aspectosAltos = items.filter(i => i.value >= 7);
+    
+    let analisisElementos = `<div style="background:#f0f4f8;border-radius:10px;padding:15px;margin-top:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> Media global: <strong>${mediaGeneral.toFixed(1)}/10</strong>. `;
+    analisisElementos += `Puntuación más alta: "<strong>${mejorAspecto.label}</strong>" (${mejorAspecto.value.toFixed(1)}). `;
+    analisisElementos += `Puntuación más baja: "<strong>${peorAspecto.label}</strong>" (${peorAspecto.value.toFixed(1)}). `;
+    analisisElementos += `<br><br>${aspectosAltos.length} condición(es) ≥7 | ${aspectosBajos.length} condición(es) <5.`;
+    analisisElementos += '</div>';
+    
+    document.getElementById('resultsElementos').innerHTML = `<div class="card"><h2>⚙️ Condiciones para tu intervención en promoción de la salud</h2>
+        <p style="color:var(--text-light);margin-bottom:15px;font-size:0.9em">Valoración media de cada condición (escala 1-10: 1 = Muy deficiente, 10 = Excelente)</p>
+        ${items.map(i => { const p = (i.value / 10) * 100, c = getColor10(i.value); return `<div class="lollipop-item"><div class="lollipop-label">${i.label}</div><div class="lollipop-track"><div class="lollipop-line" style="width:${p}%;background:${c}"></div><div class="lollipop-dot" style="left:calc(${p}% - 12px);background:${c}">${i.value.toFixed(1)}</div></div></div>`; }).join('')}
+        ${analisisElementos}
+    </div>`;
+}
+
+function renderResultsDiagnostico() {
+    // Usar etiquetas completas para que se entienda qué se pregunta
+    const items = Object.entries(LABELS.diagnostico).map(([k, v]) => ({ key: k, label: v, value: calcMedia(k) })).sort((a, b) => b.value - a.value);
+    
+    // Análisis descriptivo
+    const mediaGeneral = items.reduce((a, b) => a + b.value, 0) / items.length;
+    const mejorItem = items[0];
+    const peorItem = items[items.length - 1];
+    
+    let analisisDiag = `<div style="background:#f0f4f8;border-radius:10px;padding:15px;margin-top:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> Media global: <strong>${mediaGeneral.toFixed(1)}/5</strong>. `;
+    analisisDiag += `Puntuación más alta: "${LABELS.diagnostico_corto[mejorItem.key]}" (${mejorItem.value.toFixed(1)}). `;
+    analisisDiag += `Puntuación más baja: "${LABELS.diagnostico_corto[peorItem.key]}" (${peorItem.value.toFixed(1)}).`;
+    analisisDiag += '</div>';
+    
+    document.getElementById('resultsDiagnostico').innerHTML = `<div class="card"><h2>🔬 Diagnóstico comunitario</h2>
+        <p style="color:var(--text-light);margin-bottom:8px;font-size:0.9em"><strong>Pregunta:</strong> "Indica tu grado de acuerdo con las siguientes afirmaciones"</p>
+        <p style="color:var(--text-light);margin-bottom:15px;font-size:0.85em">Escala: 1 = Muy en desacuerdo ... 5 = Muy de acuerdo</p>
+        ${items.map(i => { const p = (i.value / 5) * 100, c = getColor(i.value); return `<div class="lollipop-item"><div class="lollipop-label" style="font-size:0.85em">${i.label}</div><div class="lollipop-track"><div class="lollipop-line" style="width:${p}%;background:${c}"></div><div class="lollipop-dot" style="left:calc(${p}% - 12px);background:${c}">${i.value.toFixed(1)}</div></div></div>`; }).join('')}
+        ${analisisDiag}
+    </div>`;
+}
+
+function renderResultsColaboracion() {
+    const n = responses.length || 1;
+    const extC = {}, profC = {};
+    for (let i = 1; i <= 7; i++) extC[i] = responses.filter(r => r[`colaboracion_externa___${i}`] == 1).length;
+    for (let i = 1; i <= 11; i++) profC[i] = responses.filter(r => r[`colaboracion_profesionales___${i}`] == 1).length;
+    
+    // Ordenar por porcentaje descendente
+    const extSorted = Object.entries(LABELS.colaboracion_externa).map(([k, v]) => ({ k, v, p: (extC[k] || 0) / n * 100 })).sort((a, b) => b.p - a.p);
+    const profSorted = Object.entries(LABELS.colaboracion_profesionales).map(([k, v]) => ({ k, v, p: (profC[k] || 0) / n * 100 })).sort((a, b) => b.p - a.p);
+    
+    // Análisis descriptivo
+    let analisisColab = `<div class="card"><div style="background:#f0f4f8;border-radius:10px;padding:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> `;
+    
+    if (extSorted[0] && extSorted[1]) {
+        analisisColab += `<strong>Organizaciones externas</strong> con mayor colaboración: ${extSorted[0].v} (${extSorted[0].p.toFixed(0)}%), ${extSorted[1].v} (${extSorted[1].p.toFixed(0)}%). `;
+    }
+    
+    if (profSorted[0] && profSorted[1]) {
+        analisisColab += `<br><br><strong>Profesionales UGC</strong> con mayor colaboración: ${profSorted[0].v} (${profSorted[0].p.toFixed(0)}%), ${profSorted[1].v} (${profSorted[1].p.toFixed(0)}%).`;
+    }
+    analisisColab += '</div></div>';
+    
+    document.getElementById('resultsColaboracion').innerHTML = `
+        <div class="card"><h2>🏛️ Organizaciones externas</h2><div class="collab-grid">${extSorted.map(item => `<div class="collab-item ${item.p > 50 ? 'high' : ''}"><div class="icon">${LABELS.colaboracion_externa_icon[item.k]}</div><div class="name">${item.v}</div><div class="pct">${item.p.toFixed(0)}%</div></div>`).join('')}</div></div>
+        <div class="card"><h2>👨‍⚕️ Profesionales UGC</h2><div class="collab-grid">${profSorted.map(item => `<div class="collab-item ${item.p > 50 ? 'high' : ''}"><div class="icon">${LABELS.colaboracion_profesionales_icon[item.k]}</div><div class="name">${item.v}</div><div class="pct">${item.p.toFixed(0)}%</div></div>`).join('')}</div></div>
+        ${analisisColab}`;
+}
+
+function renderResultsEpvsa() {
+    const counts = {};
+    responses.forEach(r => { if (r.objetivo_epvsa) counts[r.objetivo_epvsa] = (counts[r.objetivo_epvsa] || 0) + 1; });
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    
+    // Análisis descriptivo
+    const top3 = sorted.slice(0, 3);
+    
+    let analisisEpvsa = `<div style="background:#f0f4f8;border-radius:10px;padding:15px;margin-top:15px;font-size:0.9em;line-height:1.6">
+        <strong>📝 Análisis:</strong> Objetivos más seleccionados: `;
+    
+    analisisEpvsa += top3.map((item, i) => {
+        const label = LABELS.objetivo_epvsa[item[0]];
+        const pct = (item[1]/total*100).toFixed(0);
+        return `${i+1}º ${label ? label.split(' ').slice(0, 6).join(' ') + '...' : 'N/A'} (${pct}%)`;
+    }).join(' | ');
+    analisisEpvsa += '</div>';
+    
+    document.getElementById('resultsEpvsa').innerHTML = `<div class="card"><h2>🎯 Objetivos estratégicos de la EPVSA</h2>
+        <p style="color:var(--text-light);margin-bottom:15px;font-size:0.9em">Estrategia de Promoción de una Vida Saludable en Andalucía - Objetivo prioritario seleccionado por cada residente</p>
+        ${sorted.map(([k, v], i) => `<div class="ranking-item"><div class="pos">${i + 1}</div><div class="icon">${LABELS.objetivo_epvsa_icon[k]}</div><div class="text">${LABELS.objetivo_epvsa[k]}</div><div class="value">${(v / total * 100).toFixed(0)}%</div></div>`).join('')}
+        ${analisisEpvsa}
+    </div>`;
+}
+
+// ==================== COMPARATIVA MIR vs EIR ====================
+function renderResultsComparativa() {
+    const mir = responses.filter(r => r.tipo_residente == 1);
+    const eir = responses.filter(r => r.tipo_residente == 2);
+    
+    function calcMediaGrupo(arr, field) {
+        const v = arr.map(r => parseFloat(r[field])).filter(x => x && !isNaN(x));
+        return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+    }
+    
+    const indicadores = [
+        { key: 'participacion_promocion', label: 'Participación en promoción de la salud' },
+        { key: 'valoracion_formacion', label: 'Valoración formación Grado' },
+        { key: 'valoracion_formacion_2', label: 'Valoración formación Residencia' },
+        { key: 'aplicabilidad_formacion', label: 'Aplicabilidad de la formación' }
+    ];
+    
+    let indicadoresHtml = indicadores.map(ind => {
+        const mMir = calcMediaGrupo(mir, ind.key);
+        const mEir = calcMediaGrupo(eir, ind.key);
+        const diff = mMir - mEir;
+        const diffIcon = Math.abs(diff) >= 0.5 ? (diff > 0 ? '⬆️' : '⬇️') : '➖';
+        const diffColor = Math.abs(diff) >= 0.5 ? (diff > 0 ? 'var(--success)' : 'var(--danger)') : 'var(--text-light)';
+        return `<tr>
+            <td style="text-align:left;padding:10px;font-size:0.9em">${ind.label}</td>
+            <td style="text-align:center;padding:10px;font-weight:700;color:#2c5282">${mMir.toFixed(2)}</td>
+            <td style="text-align:center;padding:10px;font-weight:700;color:#ed8936">${mEir.toFixed(2)}</td>
+            <td style="text-align:center;padding:10px;color:${diffColor}">${diffIcon} ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+    
+    const elemKeys = Object.keys(LABELS.elementos_corto);
+    let elementosHtml = elemKeys.map(key => {
+        const mMir = calcMediaGrupo(mir, key);
+        const mEir = calcMediaGrupo(eir, key);
+        const diff = mMir - mEir;
+        const diffIcon = Math.abs(diff) >= 1.0 ? (diff > 0 ? '⬆️' : '⬇️') : '➖';
+        const diffColor = Math.abs(diff) >= 1.0 ? (diff > 0 ? 'var(--success)' : 'var(--danger)') : 'var(--text-light)';
+        return `<tr>
+            <td style="text-align:left;padding:8px;font-size:0.85em">${LABELS.elementos_corto[key]}</td>
+            <td style="text-align:center;padding:8px;font-weight:600;color:#2c5282">${mMir.toFixed(2)}</td>
+            <td style="text-align:center;padding:8px;font-weight:600;color:#ed8936">${mEir.toFixed(2)}</td>
+            <td style="text-align:center;padding:8px;color:${diffColor}">${diffIcon}</td>
+        </tr>`;
+    }).join('');
+    
+    document.getElementById('resultsComparativa').innerHTML = `
+        <div class="card">
+            <h2>📊 Comparativa MIR vs EIR - Indicadores principales</h2>
+            <p style="color:var(--text-light);margin-bottom:15px;font-size:0.9em">Diferencias ≥ 0.5 puntos se resaltan con ⬆️⬇️</p>
+            <div style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead>
+                        <tr style="background:var(--bg)">
+                            <th style="text-align:left;padding:12px;font-weight:600">Indicador</th>
+                            <th style="text-align:center;padding:12px;color:#2c5282;font-weight:600">🩺 MIR (n=${mir.length})</th>
+                            <th style="text-align:center;padding:12px;color:#ed8936;font-weight:600">💉 EIR (n=${eir.length})</th>
+                            <th style="text-align:center;padding:12px;font-weight:600">Diferencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>${indicadoresHtml}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <h2>📋 Condiciones para la intervención en promoción de la salud</h2>
+            <p style="color:var(--text-light);margin-bottom:15px;font-size:0.9em">Valoración media por tipo de residente (escala 1-10). Diferencias ≥ 1 punto se resaltan con ⬆️⬇️</p>
+            <div style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead>
+                        <tr style="background:var(--bg)">
+                            <th style="text-align:left;padding:10px;font-weight:600">Condición</th>
+                            <th style="text-align:center;padding:10px;color:#2c5282;font-weight:600">MIR</th>
+                            <th style="text-align:center;padding:10px;color:#ed8936;font-weight:600">EIR</th>
+                            <th style="text-align:center;padding:10px;font-weight:600">Dif.</th>
+                        </tr>
+                    </thead>
+                    <tbody>${elementosHtml}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card"><div style="background:#f0f4f8;border-radius:10px;padding:15px;font-size:0.9em;line-height:1.6">
+            <strong>📝 Análisis:</strong> Muestra: ${mir.length} MIR y ${eir.length} EIR. 
+            ${(() => {
+                const diffs = indicadores.map(ind => {
+                    const mMir = calcMediaGrupo(mir, ind.key);
+                    const mEir = calcMediaGrupo(eir, ind.key);
+                    return { label: ind.label, diff: mMir - mEir };
+                }).filter(d => Math.abs(d.diff) >= 0.3);
+                if (diffs.length === 0) return 'Las diferencias observadas entre MIR y EIR son inferiores a 0.3 puntos en todos los indicadores.';
+                return 'Diferencias observadas ≥0.3 puntos: ' + diffs.map(d => `${d.label} (${d.diff > 0 ? 'MIR' : 'EIR'} +${Math.abs(d.diff).toFixed(1)})`).join(', ') + '.';
+            })()}
+        </div></div>
+    `;
+}
+
+// ==================== ANÁLISIS POR SEXO ====================
+function renderResultsSexo() {
+    const hombres = responses.filter(r => r.sexo == 1);
+    const mujeres = responses.filter(r => r.sexo == 2);
+    const nH = hombres.length || 1;
+    const nM = mujeres.length || 1;
+    
+    function calcMediaGrupo(arr, field) {
+        const v = arr.map(r => parseFloat(r[field])).filter(x => x && !isNaN(x));
+        return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+    }
+    
+    const hMir = hombres.filter(r => r.tipo_residente == 1).length;
+    const hEir = hombres.filter(r => r.tipo_residente == 2).length;
+    const mMir = mujeres.filter(r => r.tipo_residente == 1).length;
+    const mEir = mujeres.filter(r => r.tipo_residente == 2).length;
+    
+    const indicadores = [
+        { key: 'participacion_promocion', label: 'Participación en promoción de la salud' },
+        { key: 'valoracion_formacion', label: 'Valoración formación Grado' },
+        { key: 'valoracion_formacion_2', label: 'Valoración formación Residencia' },
+        { key: 'aplicabilidad_formacion', label: 'Aplicabilidad de la formación' }
+    ];
+    
+    let comparativaHtml = indicadores.map(ind => {
+        const mediaH = calcMediaGrupo(hombres, ind.key);
+        const mediaM = calcMediaGrupo(mujeres, ind.key);
+        const diff = mediaH - mediaM;
+        const diffIcon = Math.abs(diff) >= 0.5 ? (diff > 0 ? '⬆️' : '⬇️') : '➖';
+        return `<tr>
+            <td style="text-align:left;padding:10px;font-size:0.9em">${ind.label}</td>
+            <td style="text-align:center;padding:10px;font-weight:700;color:#2c5282">${mediaH.toFixed(2)}</td>
+            <td style="text-align:center;padding:10px;font-weight:700;color:#e53e3e">${mediaM.toFixed(2)}</td>
+            <td style="text-align:center;padding:10px">${diffIcon}</td>
+        </tr>`;
+    }).join('');
+    
+    document.getElementById('resultsSexo').innerHTML = `
+        <div class="card">
+            <h2>👩‍⚕️ Distribución MIR/EIR por Sexo</h2>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;text-align:center">
+                <div>
+                    <div style="font-size:2.5em;margin-bottom:5px">👨</div>
+                    <div style="font-size:1.1em;font-weight:600;color:#2c5282">Hombres (n=${hombres.length})</div>
+                    <div style="margin-top:10px">
+                        <span style="background:#2c5282;color:white;padding:5px 12px;border-radius:15px;font-size:0.85em;margin:3px">MIR: ${hMir}</span>
+                        <span style="background:#ed8936;color:white;padding:5px 12px;border-radius:15px;font-size:0.85em;margin:3px">EIR: ${hEir}</span>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:2.5em;margin-bottom:5px">👩</div>
+                    <div style="font-size:1.1em;font-weight:600;color:#e53e3e">Mujeres (n=${mujeres.length})</div>
+                    <div style="margin-top:10px">
+                        <span style="background:#2c5282;color:white;padding:5px 12px;border-radius:15px;font-size:0.85em;margin:3px">MIR: ${mMir}</span>
+                        <span style="background:#ed8936;color:white;padding:5px 12px;border-radius:15px;font-size:0.85em;margin:3px">EIR: ${mEir}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>📊 Indicadores principales por Sexo</h2>
+            <div style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead>
+                        <tr style="background:var(--bg)">
+                            <th style="text-align:left;padding:12px">Indicador</th>
+                            <th style="text-align:center;padding:12px;color:#2c5282">👨 Hombres</th>
+                            <th style="text-align:center;padding:12px;color:#e53e3e">👩 Mujeres</th>
+                            <th style="text-align:center;padding:12px">Dif.</th>
+                        </tr>
+                    </thead>
+                    <tbody>${comparativaHtml}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card"><div style="background:#f0f4f8;border-radius:10px;padding:15px;font-size:0.9em;line-height:1.6">
+            <strong>📝 Análisis:</strong> Muestra: ${hombres.length} hombres y ${mujeres.length} mujeres. 
+            ${(() => {
+                const diffs = indicadores.map(ind => {
+                    const mH = calcMediaGrupo(hombres, ind.key);
+                    const mM = calcMediaGrupo(mujeres, ind.key);
+                    return { label: ind.label, diff: mH - mM };
+                }).filter(d => Math.abs(d.diff) >= 0.3);
+                if (diffs.length === 0) return 'Las diferencias observadas entre hombres y mujeres son inferiores a 0.3 puntos en todos los indicadores.';
+                return 'Diferencias observadas ≥0.3 puntos: ' + diffs.map(d => `${d.label} (${d.diff > 0 ? 'H' : 'M'} +${Math.abs(d.diff).toFixed(1)})`).join(', ') + '.';
+            })()}
+        </div></div>
+    `;
+}
+
+// ==================== PERFIL DEL PROMOTOR ACTIVO ====================
+function renderResultsPromotor() {
+    const n = responses.length || 1;
+    const promotoresActivos = responses.filter(r => parseFloat(r.participacion_promocion) >= 4);
+    const noPromotores = responses.filter(r => parseFloat(r.participacion_promocion) < 4);
+    const nPA = promotoresActivos.length || 1;
+    const nNP = noPromotores.length || 1;
+    
+    function calcMediaGrupo(arr, field) {
+        const v = arr.map(r => parseFloat(r[field])).filter(x => x && !isNaN(x));
+        return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+    }
+    
+    const paMir = promotoresActivos.filter(r => r.tipo_residente == 1).length;
+    const paEir = promotoresActivos.filter(r => r.tipo_residente == 2).length;
+    const paHombre = promotoresActivos.filter(r => r.sexo == 1).length;
+    const paMujer = promotoresActivos.filter(r => r.sexo == 2).length;
+    
+    const elemKeys = Object.keys(LABELS.elementos_corto);
+    let elemComparativa = elemKeys.map(key => {
+        const mPA = calcMediaGrupo(promotoresActivos, key);
+        const mNP = calcMediaGrupo(noPromotores, key);
+        const diff = mPA - mNP;
+        const color = diff >= 1.0 ? 'var(--success)' : (diff <= -1.0 ? 'var(--danger)' : 'var(--text-light)');
+        return `<tr>
+            <td style="padding:8px;font-size:0.85em">${LABELS.elementos_corto[key]}</td>
+            <td style="text-align:center;padding:8px;font-weight:600;color:var(--success)">${mPA.toFixed(2)}</td>
+            <td style="text-align:center;padding:8px;font-weight:600;color:var(--text-light)">${mNP.toFixed(2)}</td>
+            <td style="text-align:center;padding:8px;font-weight:600;color:${color}">${diff >= 0 ? '+' : ''}${diff.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+    
+    document.getElementById('resultsPromotor').innerHTML = `
+        <div class="card">
+            <h2>🏆 Perfil del Promotor Activo</h2>
+            <div style="background:#e6fffa;border-left:4px solid var(--success);padding:15px;margin-bottom:20px;border-radius:0 8px 8px 0">
+                <p style="margin:0 0 10px 0;font-weight:600;color:#276749">📌 ¿Cómo se clasifican los residentes?</p>
+                <p style="margin:0 0 8px 0;font-size:0.9em;color:#234e52"><strong>Promotor activo:</strong> Residente que responde "A menudo" o "Siempre" (puntuación ≥ 4) a la pregunta sobre su participación en actividades de promoción de la salud.</p>
+                <p style="margin:0;font-size:0.9em;color:#234e52"><strong>No promotor:</strong> Residente que responde "Nunca", "Casi nunca" o "A veces" (puntuación < 4) a la misma pregunta.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin:20px 0">
+                <div style="background:linear-gradient(135deg,var(--success),#276749);color:white;padding:20px;border-radius:12px;text-align:center">
+                    <div style="font-size:2.5em;font-weight:700">${promotoresActivos.length}</div>
+                    <div style="font-size:0.9em;opacity:0.9">Promotores activos</div>
+                    <div style="font-size:0.8em;opacity:0.7">${(promotoresActivos.length/n*100).toFixed(0)}% del total</div>
+                </div>
+                <div style="background:linear-gradient(135deg,#718096,#4a5568);color:white;padding:20px;border-radius:12px;text-align:center">
+                    <div style="font-size:2.5em;font-weight:700">${noPromotores.length}</div>
+                    <div style="font-size:0.9em;opacity:0.9">No promotores</div>
+                    <div style="font-size:0.8em;opacity:0.7">${(noPromotores.length/n*100).toFixed(0)}% del total</div>
+                </div>
+            </div>
+            <h3 style="margin:20px 0 10px;font-size:1em;color:var(--primary)">Composición de los promotores activos</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+                <span style="background:#2c5282;color:white;padding:8px 15px;border-radius:20px;font-size:0.85em">🩺 MIR: ${paMir}</span>
+                <span style="background:#ed8936;color:white;padding:8px 15px;border-radius:20px;font-size:0.85em">💉 EIR: ${paEir}</span>
+                <span style="background:#2c5282;color:white;padding:8px 15px;border-radius:20px;font-size:0.85em">👨 Hombres: ${paHombre}</span>
+                <span style="background:#e53e3e;color:white;padding:8px 15px;border-radius:20px;font-size:0.85em">👩 Mujeres: ${paMujer}</span>
+            </div>
+        </div>
+        <div class="card">
+            <h2>⚙️ Comparativa: Promotores activos vs No promotores</h2>
+            <p style="color:var(--text-light);margin-bottom:15px;font-size:0.9em">Valoración media de cada condición de promoción de la salud (escala 1-10)</p>
+            <div style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead>
+                        <tr style="background:var(--bg)">
+                            <th style="text-align:left;padding:10px">Condición</th>
+                            <th style="text-align:center;padding:10px;color:var(--success)">Promotores activos (n=${promotoresActivos.length})</th>
+                            <th style="text-align:center;padding:10px;color:#718096">No promotores (n=${noPromotores.length})</th>
+                            <th style="text-align:center;padding:10px">Diferencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>${elemComparativa}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card"><div style="background:#f0f4f8;border-radius:10px;padding:15px;font-size:0.9em;line-height:1.6">
+            <strong>📝 Análisis:</strong> ${promotoresActivos.length} de ${n} residentes (${(promotoresActivos.length/n*100).toFixed(0)}%) se clasifican como "promotores activos". 
+            Composición: ${paMir} MIR (${(paMir/(paMir+paEir||1)*100).toFixed(0)}%) y ${paEir} EIR (${(paEir/(paMir+paEir||1)*100).toFixed(0)}%). 
+            Por sexo: ${paHombre} hombres y ${paMujer} mujeres.
+        </div></div>
+    `;
+}
+
+// ==================== EXPORTAR ====================
+function exportData() {
+    if (responses.length === 0) { alert('No hay datos para exportar'); return; }
+    const headers = Object.keys(responses[0]);
+    let csv = headers.join(';') + '\n';
+    responses.forEach(r => { csv += headers.map(h => r[h] ?? '').join(';') + '\n'; });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'encuesta_mireir_' + new Date().toISOString().slice(0, 10) + '.csv';
+    link.click();
+}
+
+// ==================== PDF CUESTIONARIO ====================
+function generarPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 20;
+    const marginLeft = 15;
+    const pageWidth = 210;
+    const contentWidth = pageWidth - 30;
+    
+    function checkPage(needed) { if (y + needed > 280) { doc.addPage(); y = 20; } }
+    
+    function addTitle(text, size) {
+        doc.setFontSize(size || 16);
+        doc.setTextColor(26, 54, 93);
+        doc.setFont('helvetica', 'bold');
+        doc.text(text, pageWidth / 2, y, { align: 'center' });
+        y += size ? size * 0.6 : 10;
+    }
+    
+    function addSection(text) {
+        checkPage(15);
+        y += 3;
+        doc.setFillColor(26, 54, 93);
+        doc.rect(marginLeft, y - 5, contentWidth, 7, 'F');
+        doc.setFontSize(10);
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.text(text, marginLeft + 3, y);
+        y += 8;
+        doc.setTextColor(0, 0, 0);
+    }
+    
+    function addSubsection(text) {
+        checkPage(10);
+        y += 2;
+        doc.setFontSize(9);
+        doc.setTextColor(26, 54, 93);
+        doc.setFont('helvetica', 'bold');
+        doc.text(text, marginLeft, y);
+        y += 5;
+        doc.setTextColor(0, 0, 0);
+    }
+    
+    function addQuestion(label, note) {
+        checkPage(10);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        const lines = doc.splitTextToSize(label, contentWidth);
+        doc.text(lines, marginLeft, y);
+        y += lines.length * 4;
+        if (note) {
+            doc.setFontSize(7);
+            doc.setTextColor(100, 100, 100);
+            doc.text(note, marginLeft, y);
+            y += 3;
+            doc.setTextColor(0, 0, 0);
+        }
+    }
+    
+    function addRadio(options) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        options.forEach(opt => {
+            checkPage(5);
+            doc.circle(marginLeft + 4, y - 1.2, 1.5);
+            doc.text(opt, marginLeft + 8, y);
+            y += 4;
+        });
+        y += 1;
+    }
+    
+    function addCheckbox(options) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        options.forEach(opt => {
+            checkPage(5);
+            doc.rect(marginLeft + 2.5, y - 3, 3, 3);
+            doc.text(opt, marginLeft + 8, y);
+            y += 4;
+        });
+        y += 1;
+    }
+    
+    function addDropdownCompact(options) {
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        const perLine = 3;
+        const colW = contentWidth / perLine;
+        for (let i = 0; i < options.length; i += perLine) {
+            checkPage(4);
+            for (let j = 0; j < perLine && i + j < options.length; j++) {
+                doc.text(options[i + j], marginLeft + j * colW, y);
+            }
+            y += 3.5;
+        }
+        y += 2;
+    }
+    
+    function addLikertMatrix(items, scaleLabels) {
+        checkPage(8);
+        const numOptions = scaleLabels.length;
+        const optionsWidth = numOptions <= 5 ? 32 : 55;
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(100);
+        if (numOptions <= 5) {
+            doc.text(scaleLabels.join('  |  '), marginLeft, y);
+        } else {
+            doc.text('1 = Muy deficiente                                                      10 = Excelente', marginLeft, y);
+        }
+        y += 4;
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'normal');
+        const optionsStr = scaleLabels.map((_, i) => 'O ' + (i + 1)).join('  ');
+        items.forEach(item => {
+            checkPage(6);
+            const lines = doc.splitTextToSize(item, contentWidth - optionsWidth - 5);
+            doc.text(lines, marginLeft, y);
+            doc.setFontSize(6);
+            doc.text(optionsStr, marginLeft + contentWidth - optionsWidth, y);
+            doc.setFontSize(7);
+            y += Math.max(lines.length * 3.5, 4);
+        });
+        y += 2;
+    }
+    
+    function addTextField() {
+        doc.setDrawColor(150);
+        doc.line(marginLeft, y, marginLeft + contentWidth, y);
+        y += 5;
+    }
+    
+    // === PORTADA ===
+    y = 50;
+    addTitle('CUESTIONARIO MIR/EIR', 18);
+    y += 3;
+    addTitle('Promoción de la Salud en Atención Primaria', 12);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text('Distritos Granada y Metropolitano de Granada', pageWidth / 2, y, { align: 'center' });
+    doc.setTextColor(0);
+    
+    // === DATOS SOCIODEMOGRÁFICOS ===
+    doc.addPage(); y = 20;
+    addSection('DATOS SOCIODEMOGRÁFICOS');
+    
+    addSubsection('Datos sociodemográficos');
+    addQuestion('Sexo');
+    addRadio(['1. Hombre', '2. Mujer', '3. Otro', '4. Prefiero no contestar']);
+    
+    addQuestion('Edad (años)', 'Indica tu edad en años');
+    addTextField();
+    
+    addSubsection('Datos de residencia');
+    addQuestion('Tipo de residente');
+    addRadio(['1. MIR (Medicina familiar y comunitaria)', '2. EIR (Enfermería familiar y comunitaria)']);
+    
+    addQuestion('Año de residencia MIR', 'Mostrar si tipo = MIR');
+    addRadio(['1. R1 (Primer año)', '2. R2 (Segundo año)', '3. R3 (Tercer año)', '4. R4 (Cuarto año)']);
+    
+    addQuestion('Año de residencia EIR', 'Mostrar si tipo = EIR');
+    addRadio(['1. R1 (Primer año)', '2. R2 (Segundo año)']);
+    
+    addSubsection('Unidad de Gestión Clínica');
+    addQuestion('Distrito');
+    addRadio(['0. Granada', '1. Metropolitano de Granada']);
+    
+    addQuestion('Unidad de Gestión Clínica (Granada)', 'Mostrar si distrito = Granada');
+    addDropdownCompact(['1. Albayzín', '2. Almanjáyar', '3. Bola de Oro', '4. Caleta', '5. Cartuja', '6. Casería de Montijo', '7. Chana', '8. Doctores', '9. Flores-Fígares', '10. Fortuny/Velluti', '11. Góngora', '12. Gran Capitán', '13. Realejo', '14. Zaidín Centro-Este', '15. Zaidín Sur']);
+    
+    addQuestion('Unidad de Gestión Clínica (Metropolitano)', 'Mostrar si distrito = Metropolitano');
+    addDropdownCompact(['1. Albolote', '2. Alfacar', '3. Alhama de Granada', '4. Armilla', '5. Atarfe', '6. Cenes de la Vega', '7. Churriana de la Vega', '8. Huétor-Tájar', '9. Huétor-Vega', '10. Íllora', '11. Iznalloz', '12. La Zubia', '13. Las Gabias', '14. Loja', '15. Maracena', '16. Montefrío', '17. Ogíjares', '18. Peligros', '19. Pinos Puente', '20. Santa Fe', '21. Valle de Lecrín']);
+    
+    // === FORMACIÓN ===
+    doc.addPage(); y = 20;
+    addSection('FORMACIÓN EN PROMOCIÓN DE LA SALUD');
+    
+    addSubsection('Participación en actividades de promoción de la salud');
+    addQuestion('Indica con qué frecuencia participas en actividades de promoción de la salud en tu Unidad de Gestión Clínica');
+    addRadio(['1. Nunca', '2. Casi nunca', '3. A veces', '4. A menudo', '5. Siempre']);
+    
+    addSubsection('Valoración de la formación recibida');
+    addQuestion('Valora la calidad de la formación en promoción de la salud que recibiste durante el período de formación de Grado');
+    addRadio(['1. Muy deficiente', '2. Deficiente', '3. Aceptable', '4. Buena', '5. Excelente']);
+    
+    addQuestion('Valora la calidad de la formación en promoción de la salud que has recibido hasta el momento durante tu residencia');
+    addRadio(['1. Muy deficiente', '2. Deficiente', '3. Aceptable', '4. Buena', '5. Excelente']);
+    
+    addQuestion('Valora en qué medida la formación recibida hasta el momento en promoción de la salud es aplicable a tu práctica profesional');
+    addRadio(['1. Totalmente insuficiente', '2. Insuficiente', '3. Adecuada', '4. Suficiente', '5. Totalmente suficiente']);
+    
+    addSubsection('Necesidades formativas');
+    addQuestion('Selecciona todas aquellas temáticas relacionadas con la promoción de la salud sobre las cuales te gustaría recibir formación');
+    addCheckbox(['1. Diseño, planificación y evaluación de intervenciones de promoción de la salud', '2. Competencias y habilidades para la intervención grupal en promoción de la salud', '3. Estrategias, planes y programas de promoción de la salud en mi centro', '4. Métodos y técnicas cuantitativas y cualitativas de investigación, participación y acción en promoción de la salud', '5. Otras']);
+    
+    addQuestion('Especifique otras temáticas de interés', 'Mostrar si marcó "Otras"');
+    addTextField();
+    
+    addSubsection('Disponibilidad y preferencias');
+    addQuestion('Selecciona tu disponibilidad horaria para recibir formación');
+    addCheckbox(['1. En horario laboral', '2. Por las tardes', '3. En horario flexible según disponibilidad']);
+    
+    addQuestion('Indica qué modalidad de formación prefieres');
+    addRadio(['1. Presencial', '2. Online', '3. Mixta (presencial y online)']);
+    
+    doc.addPage(); y = 20;
+    addSubsection('Objetivos estratégicos de la Estrategia de Promoción de una Vida Saludable en Andalucía (EPVSA)');
+    addQuestion('Selecciona de entre los siguientes el objetivo que sea de mayor interés para ti');
+    addRadio(['1. Incrementar los niveles de lactancia materna y el consumo de alimentos saludables', '2. Aumentar los niveles de actividad física y disminuir los hábitos sedentarios', '3. Incrementar las horas y la calidad del sueño en la población', '4. Incrementar la percepción de calidad de vida y de bienestar emocional', '5. Incrementar la percepción de satisfacción con las relaciones sexuales', '6. Disminuir el tiempo dedicado al uso de aparatos electrónicos', '7. Incrementar las recomendaciones sobre activos comunitarios', '8. Incrementar el número de empresas comprometidas con hábitos saludables', '9. Incrementar y favorecer la difusión de información sobre hábitos saludables', '10. Incrementar la formación y la investigación en promoción de hábitos saludables']);
+    
+    // === ASPECTOS PROMOCIÓN DE LA SALUD ===
+    doc.addPage(); y = 20;
+    addSection('CONDICIONES PARA TU INTERVENCIÓN EN PROMOCIÓN DE LA SALUD');
+    addQuestion('Valora las distintas condiciones relacionadas con la promoción de la salud durante tu tiempo de residencia en un centro de Atención Primaria');
+    addLikertMatrix([
+        'Existe una cultura favorable a la promoción de la salud en Atención Primaria',
+        'Dispongo de tiempo suficiente en mi agenda para actividades de promoción de la salud',
+        'Cuento con las habilidades y competencias necesarias para desarrollar actividades de promoción de la salud',
+        'Dispongo de espacios adecuados para realizar intervenciones de promoción de la salud',
+        'Dispongo de materiales y recursos suficientes para las intervenciones',
+        'Tengo acceso adecuado a la población diana para las intervenciones',
+        'Existe buena colaboración con otros profesionales para desarrollar actividades de promoción de la salud',
+        'Cuento con recursos pedagógicos y materiales didácticos adecuados',
+        'El plan de formación docente responde a mis necesidades en materia de promoción de la salud',
+        'Mi tutor/a facilita y apoya el desarrollo de actividades de promoción de la salud'
+    ], ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+    
+    // === DIAGNÓSTICO ===
+    doc.addPage(); y = 20;
+    addSection('DIAGNÓSTICO COMUNITARIO');
+    addQuestion('Indica tu grado de acuerdo con las siguientes afirmaciones');
+    addLikertMatrix([
+        'Conozco las características sociodemográficas de la población de referencia de mi UGC',
+        'Conozco la situación de salud (morbimortalidad) de la población de referencia de mi UGC',
+        'Conozco los objetivos de promoción de la salud incluidos en los acuerdos de gestión de mi UGC'
+    ], ['1-Muy en desacuerdo', '2-En desacuerdo', '3-Ni acuerdo/desacuerdo', '4-De acuerdo', '5-Muy de acuerdo']);
+    
+    addSubsection('Colaboración en promoción de la salud');
+    addQuestion('Indica con cuál o cuáles de las siguientes organizaciones has colaborado en promoción de la salud');
+    addCheckbox(['1. Administración autonómica presente en el territorio', '2. Administración local (Ayuntamiento, Mancomunidad, Diputación)', '3. Tejido social (Asociaciones de familiares, de pacientes, ONGs...)', '4. Centros de Participación Activa (autonómicos y municipales)', '5. Centros de Educación de Adultos', '6. Puntos Vuela', '7. Centros educativos']);
+    
+    addQuestion('En el caso de haberlo hecho, ¿con qué profesionales has colaborado en promoción de la salud?');
+    addCheckbox(['1. Director/a de la UGC', '2. Coordinador/a de Cuidados de Enfermería', '3. Profesionales de Medicina Familiar y Comunitaria (MFYC)', '4. Profesionales de Enfermería Familiar y Comunitaria (EFYC)', '5. Profesionales de Enfermería Referente de Centro Educativo (ERCE)', '6. Profesionales de Trabajo Social (TS)', '7. Profesionales de Fisioterapia', '8. Profesionales de Terapia Ocupacional (TO)', '9. Profesionales de la Enfermería Gestora de Casos', '10. Profesionales del Dispositivo de Cuidados Críticos y Urgencias (DDCCUU)', '11. Profesionales de Pediatría']);
+    
+    addQuestion('¿Hay alguna otra cosa sobre la cual no te hayamos preguntado y sobre la cual te gustaría comentar algo?');
+    doc.setDrawColor(150);
+    for (let i = 0; i < 4; i++) { y += 6; doc.line(marginLeft, y, marginLeft + contentWidth, y); }
+    y += 4;
+    
+    // Final
+    y += 15;
+    checkPage(20);
+    doc.setFontSize(12);
+    doc.setTextColor(26, 54, 93);
+    doc.setFont('helvetica', 'bold');
+    doc.text('¡Gracias por tu participación!', pageWidth / 2, y, { align: 'center' });
+    
+    doc.save('cuestionario_mireir_2025.pdf');
+}
+
+// ==================== SIMULACIÓN ====================
+function simularDatos() {
+    if (!sessionId) {
+        alert('Primero inicia una sesión');
+        return;
+    }
+    if (!confirm('¿Generar 100 respuestas simuladas?')) return;
+    
+    const ugcGranada = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+    const ugcMetro = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
+    
+    let count = 0;
+    const interval = setInterval(() => {
+        if (count >= 100) {
+            clearInterval(interval);
+            alert('✅ 100 respuestas simuladas generadas');
+            return;
+        }
+        
+        // 70% MIR, 30% EIR
+        const esMir = Math.random() < 0.7;
+        const tipo = esMir ? 1 : 2;
+        const anioMir = esMir ? Math.floor(Math.random() * 4) + 1 : null;
+        const anioEir = !esMir ? Math.floor(Math.random() * 2) + 1 : null;
+        const distrito = Math.random() < 0.5 ? 0 : 1;
+        
+        const data = {
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+            timestamp: Date.now(),
+            sexo: Math.floor(Math.random() * 4) + 1,
+            edad: Math.floor(Math.random() * 15) + 25,
+            tipo_residente: tipo,
+            anio_residencia_mir: anioMir,
+            anio_residencia_eir: anioEir,
+            distrito: distrito,
+            ugc_granada: distrito === 0 ? ugcGranada[Math.floor(Math.random() * ugcGranada.length)] : null,
+            ugc_metropolitano: distrito === 1 ? ugcMetro[Math.floor(Math.random() * ugcMetro.length)] : null,
+            participacion_promocion: Math.floor(Math.random() * 5) + 1,
+            valoracion_formacion: Math.floor(Math.random() * 5) + 1,
+            valoracion_formacion_2: Math.floor(Math.random() * 5) + 1,
+            aplicabilidad_formacion: Math.floor(Math.random() * 5) + 1,
+            modalidad_formacion: Math.floor(Math.random() * 3) + 1,
+            objetivo_epvsa: Math.floor(Math.random() * 10) + 1,
+            elem_cultura: Math.floor(Math.random() * 10) + 1,
+            elem_tiempo: Math.floor(Math.random() * 10) + 1,
+            elem_habilidades: Math.floor(Math.random() * 10) + 1,
+            elem_espacios: Math.floor(Math.random() * 10) + 1,
+            elem_materiales: Math.floor(Math.random() * 10) + 1,
+            elem_acceso: Math.floor(Math.random() * 10) + 1,
+            elem_colaboracion: Math.floor(Math.random() * 10) + 1,
+            elem_recursos_ped: Math.floor(Math.random() * 10) + 1,
+            elem_plan_formacion: Math.floor(Math.random() * 10) + 1,
+            elem_tutor: Math.floor(Math.random() * 10) + 1,
+            diag_caract_poblacion: Math.floor(Math.random() * 5) + 1,
+            diag_morbimortalidad: Math.floor(Math.random() * 5) + 1,
+            diag_objetivos: Math.floor(Math.random() * 5) + 1
+        };
+        
+        // Checkboxes aleatorios
+        for (let i = 1; i <= 5; i++) data['tematicas_formacion___' + i] = Math.random() < 0.3 ? 1 : 0;
+        for (let i = 1; i <= 3; i++) data['disponibilidad_horaria___' + i] = Math.random() < 0.4 ? 1 : 0;
+        for (let i = 1; i <= 7; i++) data['colaboracion_externa___' + i] = Math.random() < 0.4 ? 1 : 0;
+        for (let i = 1; i <= 11; i++) data['colaboracion_profesionales___' + i] = Math.random() < 0.5 ? 1 : 0;
+        
+        db.ref('encuestas_mireir/' + sessionId + '/responses').push(data);
+        count++;
+    }, 100);
+}
+</script>
+</body>
+</html>
